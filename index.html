@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pizarra de Monitoreo</title>
+<style>
+  :root{
+    --bg:#eef1f5; --panel:#ffffff; --ink:#1d2433; --muted:#667085; --line:#d9dee7;
+    --azul:#1f5fbf; --azul-s:#e8f0fc; --rojo:#c6392f; --rojo-s:#fdecea; --ambar:#b7791f; --ambar-s:#fdf3e1;
+    --verde:#2f855a; --verde-s:#e6f4ec; --morado:#6b46c1; --morado-s:#f0ebfb; --gris-s:#f2f4f7;
+    --radio:10px; --sombra:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  button{font:inherit;cursor:pointer}
+  header{position:sticky;top:0;z-index:5;background:#16213a;color:#fff;padding:10px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px}
+  header .reloj{font-variant-numeric:tabular-nums;opacity:.8;font-size:13px}
+  header .esp{flex:1}
+  .chip-user{background:rgba(255,255,255,.12);border-radius:999px;padding:5px 12px;font-weight:600}
+  .chip-user small{opacity:.75;font-weight:400;margin-left:6px}
+  .btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:7px 12px}
+  .btn:hover{background:var(--gris-s)}
+  .btn-p{background:var(--azul);border-color:var(--azul);color:#fff}
+  .btn-p:hover{background:#174d9c}
+  .btn-r{color:var(--rojo);border-color:#f1c4bf}
+  .btn-h{background:transparent;border-color:rgba(255,255,255,.35);color:#fff}
+  .btn-h:hover{background:rgba(255,255,255,.1)}
+  .barra{display:flex;gap:8px;align-items:center;padding:12px 18px 0;flex-wrap:wrap}
+  .barra input,.barra select{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:#fff;font:inherit}
+  .barra input{min-width:220px}
+  .demo{background:var(--ambar-s);color:#7a4f0e;padding:6px 18px;font-size:13px;border-bottom:1px solid #f3dcb0}
+  main{padding:12px 18px 30px}
+  h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:14px 0 8px;font-weight:650}
+  .avisos{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px}
+  .aviso{flex:0 0 300px;background:var(--panel);border-radius:var(--radio);box-shadow:var(--sombra);padding:12px 14px;border-top:4px solid var(--morado);cursor:pointer}
+  .aviso.t-aviso-importante{border-top-color:var(--rojo)}
+  .aviso.t-cambio-de-actividad{border-top-color:var(--ambar)}
+  .aviso .tit{font-weight:650;margin:4px 0 6px}
+  .aviso .det{color:#3b4456;font-size:13px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .aviso .pie{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px}
+  .leidos{font-size:12px;color:var(--muted)}
+  .vacio{color:var(--muted);font-size:13px;padding:10px 2px}
+  .tablero{display:grid;grid-template-columns:repeat(3,minmax(260px,1fr));gap:14px;align-items:start}
+  .col{background:#e3e8ef;border-radius:12px;padding:10px;min-height:200px;transition:background .15s}
+  .col.sobre{background:#d3ddeb;outline:2px dashed var(--azul);outline-offset:-4px}
+  .col-h{display:flex;justify-content:space-between;align-items:center;padding:2px 4px 10px;font-weight:650}
+  .col-h .n{background:#fff;border-radius:999px;padding:1px 9px;font-size:12px;color:var(--muted)}
+  .tarjeta{background:var(--panel);border-radius:var(--radio);box-shadow:var(--sombra);padding:10px 12px;margin-bottom:9px;border-left:5px solid var(--azul);cursor:grab}
+  .tarjeta:active{cursor:grabbing}
+  .tarjeta.t-seguimiento{border-left-color:var(--azul)}
+  .tarjeta.t-aviso-importante{border-left-color:var(--rojo)}
+  .tarjeta.t-instruccion-nueva{border-left-color:var(--morado)}
+  .tarjeta.t-cambio-de-actividad{border-left-color:var(--ambar)}
+  .tarjeta.t-otro{border-left-color:#98a2b3}
+  .fila1{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .tarjeta .tit{font-weight:600;margin:5px 0 4px;line-height:1.3}
+  .meta{font-size:12px;color:var(--muted);line-height:1.5}
+  .badge{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:600}
+  .p-alta{background:var(--rojo-s);color:var(--rojo)}
+  .p-media{background:var(--ambar-s);color:var(--ambar)}
+  .p-baja{background:var(--verde-s);color:var(--verde)}
+  .tipo{background:var(--gris-s);color:#344054}
+  .vencido{color:var(--rojo);font-weight:600}
+  .ult{margin-top:6px;padding-top:6px;border-top:1px solid #eef0f4;font-size:12px;color:#475467}
+  /* Modales */
+  .velo{position:fixed;inset:0;background:rgba(16,24,40,.45);display:none;align-items:flex-start;justify-content:center;z-index:20;padding:40px 12px;overflow:auto}
+  .velo.on{display:flex}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 20px 50px rgba(0,0,0,.25);padding:20px 22px}
+  .modal h3{margin:0 0 4px;font-size:18px}
+  .modal .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  label{display:block;font-size:12.5px;font-weight:600;color:#344054;margin:10px 0 4px}
+  .modal input,.modal select,.modal textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;background:#fff}
+  textarea{min-height:90px;resize:vertical}
+  .acciones{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+  .err{color:var(--rojo);font-size:13px;margin-top:8px;min-height:18px}
+  .detalle-txt{white-space:pre-wrap;background:var(--gris-s);border-radius:8px;padding:10px 12px;margin:8px 0}
+  .linea{border-left:2px solid var(--line);margin:12px 0 0 6px;padding-left:14px}
+  .ev{position:relative;margin-bottom:12px}
+  .ev:before{content:"";position:absolute;left:-20px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--azul)}
+  .ev .q{font-size:12px;color:var(--muted)}
+  .ev .a{font-weight:600;font-size:13px}
+  .login{max-width:380px}
+  #vLogin{z-index:50;background:rgba(16,24,40,.8)}
+  .cargando{position:fixed;bottom:16px;right:16px;background:#16213a;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;display:none;z-index:30}
+  .cargando.on{display:block}
+  @media (max-width:900px){.tablero{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Pizarra de Monitoreo</h1>
+  <span class="reloj" id="reloj"></span>
+  <span class="esp"></span>
+  <span class="chip-user" id="chipUser" hidden></span>
+  <button class="btn btn-h" id="btnExport" hidden>Exportar / Resumen</button>
+  <button class="btn btn-p" id="btnNuevo" hidden>+ Nuevo registro</button>
+  <button class="btn btn-h" id="btnSalir" hidden>Cambiar de operador</button>
+</header>
+<div class="demo" id="demo" hidden>Vista previa con datos de ejemplo. Nada se guarda; en Google funcionará con tus datos reales. PIN de prueba: 1234</div>
+
+<div class="barra" id="barra" hidden>
+  <input id="fBuscar" placeholder="Buscar por ID, título o detalle">
+  <select id="fTipo"><option value="">Todos los tipos</option></select>
+  <select id="fSitio"><option value="">Todos los sitios</option></select>
+  <select id="fResp"><option value="">Todos los responsables</option></select>
+</div>
+
+<main id="main" hidden>
+  <h2 class="sec">Avisos e instrucciones vigentes</h2>
+  <div class="avisos" id="avisos"></div>
+  <h2 class="sec">Seguimientos</h2>
+  <div class="tablero" id="tablero"></div>
+</main>
+
+<!-- Inicio de sesión -->
+<div class="velo" id="vLogin">
+  <div class="modal login">
+    <h3>¿Quién está en turno?</h3>
+    <div class="sub">Cada acción que hagas quedará registrada con tu nombre, fecha y hora.</div>
+    <label for="lNombre">Operador</label>
+    <select id="lNombre"></select>
+    <label for="lPin">PIN personal</label>
+    <input id="lPin" type="password" inputmode="numeric" autocomplete="off" maxlength="6">
+    <div class="err" id="lErr"></div>
+    <div class="acciones"><button class="btn btn-p" id="lEntrar">Entrar</button></div>
+  </div>
+</div>
+
+<!-- Nuevo registro -->
+<div class="velo" id="vNuevo">
+  <div class="modal">
+    <h3>Nuevo registro</h3>
+    <div class="sub">Se creará con tu nombre y la hora actual.</div>
+    <div class="grid2">
+      <div><label>Tipo</label><select id="nTipo"></select></div>
+      <div><label>Prioridad</label><select id="nPrio"></select></div>
+      <div><label>Categoría</label><select id="nCat"></select></div>
+      <div><label>País / sitio</label><select id="nSitio"></select></div>
+      <div><label>Turno</label><select id="nTurno"></select></div>
+      <div><label>Responsable</label><select id="nResp"></select></div>
+    </div>
+    <label>Título breve</label><input id="nTitulo" maxlength="150">
+    <label>Detalle</label><textarea id="nDetalle" placeholder="Qué pasó o qué se instruye, dónde, cámara/unidad, hora del evento y qué se hizo."></textarea>
+    <label>Fecha compromiso (opcional)</label><input id="nFecha" type="date">
+    <div class="err" id="nErr"></div>
+    <div class="acciones">
+      <button class="btn" data-cerrar="vNuevo">Cancelar</button>
+      <button class="btn btn-p" id="nGuardar">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Detalle -->
+<div class="velo" id="vDet">
+  <div class="modal">
+    <div class="fila1"><span id="dId"></span><span id="dBadges"></span></div>
+    <h3 id="dTit" style="margin-top:6px"></h3>
+    <div class="sub" id="dMeta"></div>
+    <div class="detalle-txt" id="dTxt"></div>
+    <div class="meta" id="dLeido"></div>
+    <label for="dCom">Comentario (obligatorio para cualquier cambio)</label>
+    <textarea id="dCom" placeholder="Qué se hizo, qué se revisó, qué falta…"></textarea>
+    <div class="err" id="dErr"></div>
+    <div class="acciones" id="dAcc"></div>
+    <h2 class="sec">Historial</h2>
+    <div class="linea" id="dHist"><div class="vacio">Cargando…</div></div>
+  </div>
+</div>
+
+<!-- Exportar (solo coordinador) -->
+<div class="velo" id="vExp">
+  <div class="modal" style="max-width:480px">
+    <h3>Exportar historial y resumen</h3>
+    <div class="sub">Solo el coordinador. Cada exportación queda registrada en el historial.</div>
+    <div class="grid2">
+      <div><label for="eDesde">Desde</label><input id="eDesde" type="date"></div>
+      <div><label for="eHasta">Hasta (incluido)</label><input id="eHasta" type="date"></div>
+    </div>
+    <div class="err" id="eErr"></div>
+    <div class="acciones">
+      <button class="btn" data-cerrar="vExp">Cerrar</button>
+      <button class="btn" data-exp="csv">Historial CSV</button>
+      <button class="btn" data-exp="pdf">Historial PDF</button>
+      <button class="btn btn-p" data-exp="resumen">Resumen PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mover (arrastrar) -->
+<div class="velo" id="vMover">
+  <div class="modal" style="max-width:460px">
+    <h3 id="mTit"></h3>
+    <div class="sub">El cambio queda en el historial con tu nombre.</div>
+    <label for="mCom">Comentario</label>
+    <textarea id="mCom"></textarea>
+    <div class="err" id="mErr"></div>
+    <div class="acciones">
+      <button class="btn" data-cerrar="vMover">Cancelar</button>
+      <button class="btn btn-p" id="mOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div class="cargando" id="cargando">Guardando…</div>
+
+<script>
+(function(){
+  'use strict';
+  var DEMO = !(window.google && google.script && google.script.run);
+  var S = { token:null, usuario:null, datos:null, sel:null, mover:null };
+  var $ = function(id){ return document.getElementById(id); };
+  var COLS = ['Abierto','En seguimiento','Cerrado'];
+
+  /* ---------- almacenamiento de sesión (solo esta pestaña) ---------- */
+  function guardarToken(t){ try{ t ? sessionStorage.setItem('pizarraToken',t) : sessionStorage.removeItem('pizarraToken'); }catch(e){} }
+  function leerToken(){ try{ return sessionStorage.getItem('pizarraToken'); }catch(e){ return null; } }
+
+  /* ---------- llamada al servidor ---------- */
+  function api(fn){
+    var args = Array.prototype.slice.call(arguments,1);
+    if (DEMO) return Demo[fn].apply(null,args);
+    return new Promise(function(res,rej){
+      google.script.run.withSuccessHandler(res).withFailureHandler(function(e){ rej(e); })[fn].apply(null,args);
+    });
+  }
+  function msgErr(e){ var m = (e && e.message) || String(e); return m.replace(/^Error:\s*/,''); }
+  function ocupado(on){ $('cargando').classList.toggle('on',!!on); }
+  function manejarSesion(e){
+    if (msgErr(e).indexOf('SESION_VENCIDA')>-1){ S.token=null; guardarToken(null); mostrarLogin('Tu sesión venció. Vuelve a entrar.'); return true; }
+    return false;
+  }
+
+  /* ---------- utilidades ---------- */
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function slug(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-'); }
+  var TZ='America/El_Salvador';
+  function fFecha(iso,conHora){
+    if(!iso) return '';
+    if(/^\d{4}-\d{2}-\d{2}$/.test(iso)){ var p=iso.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; } // fecha sin hora: sin conversión de zona
+    var d=new Date(iso);
+    return conHora? d.toLocaleString('es-SV',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : d.toLocaleDateString('es-SV',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric'});
+  }
+  function hace(iso){ if(!iso) return ''; var m=Math.round((Date.now()-new Date(iso))/60000); if(m<1) return 'hace un momento'; if(m<60) return 'hace '+m+' min'; var h=Math.round(m/60); if(h<24) return 'hace '+h+' h'; return 'hace '+Math.round(h/24)+' d'; }
+  function opciones(sel,lista,primera){ sel.innerHTML=(primera!==undefined?'<option value="">'+esc(primera)+'</option>':'')+lista.map(function(v){return '<option>'+esc(v)+'</option>';}).join(''); }
+  function abrir(id){ $(id).classList.add('on'); }
+  function cerrar(id){ $(id).classList.remove('on'); }
+  function hoyES(){ return new Date().toLocaleDateString('en-CA',{timeZone:TZ}); } // yyyy-mm-dd en El Salvador
+  function vencida(t){ if(!t.fecha||t.estado==='Cerrado') return false; return t.fecha<hoyES(); }
+  function esSoloCoord(t){ return S.datos.catalogos.tiposSoloCoord.indexOf(t.tipo)>-1 && S.usuario.rol!=='Coordinador'; }
+  function uuid(){ return (window.crypto&&crypto.randomUUID)? crypto.randomUUID() : String(Date.now())+Math.random().toString(16).slice(2); }
+
+  /* ---------- login ---------- */
+  function mostrarLogin(msg){
+    // Relevo: cierra cualquier ventana abierta y borra lo que vio el operador anterior.
+    Array.prototype.forEach.call(document.querySelectorAll('.velo.on'),function(v){ v.classList.remove('on'); });
+    S.datos=null; S.usuario=null; S.sel=null; S.mover=null; ocupado(false);
+    ['fBuscar','fTipo','fSitio','fResp'].forEach(function(i){ $(i).value=''; });
+    $('avisos').innerHTML=''; $('tablero').innerHTML='';
+    $('main').hidden=true; $('barra').hidden=true; $('btnNuevo').hidden=true; $('btnExport').hidden=true; $('btnSalir').hidden=true; $('chipUser').hidden=true;
+    $('lErr').textContent=msg||''; $('lPin').value='';
+    api('listarOperadores').then(function(ops){ opciones($('lNombre'),ops); abrir('vLogin'); setTimeout(function(){$('lPin').focus();},50); })
+      .catch(function(e){ $('lErr').textContent=msgErr(e); abrir('vLogin'); });
+  }
+  $('lEntrar').onclick=entrar;
+  $('lPin').addEventListener('keydown',function(e){ if(e.key==='Enter') entrar(); });
+  function entrar(){
+    $('lErr').textContent='';
+    api('iniciarSesion',$('lNombre').value,$('lPin').value).then(function(r){
+      S.token=r.token; guardarToken(r.token); cerrar('vLogin'); cargar();
+    }).catch(function(e){ $('lErr').textContent=msgErr(e); $('lPin').value=''; });
+  }
+  $('btnSalir').onclick=function(){
+    var t=S.token; S.token=null; guardarToken(null);
+    api('cerrarSesion',t).catch(function(){}); mostrarLogin('Sesión cerrada. Entrega el turno con el relevo firmado.');
+  };
+
+  /* ---------- carga y render ---------- */
+  function cargar(silencioso){
+    if(!S.token) return;
+    if(!silencioso) ocupado(true);
+    return api('obtenerTablero',S.token).then(function(d){ ocupado(false); aplicar(d); })
+      .catch(function(e){ ocupado(false); if(!manejarSesion(e) && !silencioso) alert(msgErr(e)); });
+  }
+  function aplicar(d){
+    var primera = !S.datos;
+    S.datos=d; S.usuario=d.usuario;
+    $('chipUser').innerHTML=esc(d.usuario.nombre)+'<small>'+esc(d.usuario.rol)+'</small>';
+    $('btnExport').hidden = d.usuario.rol!=='Coordinador';
+    $('chipUser').hidden=false; $('btnNuevo').hidden=false; $('btnSalir').hidden=false; $('main').hidden=false; $('barra').hidden=false;
+    if(primera){
+      opciones($('fTipo'),d.catalogos.tipos.concat(d.catalogos.tiposAviso.filter(function(t){return d.catalogos.tipos.indexOf(t)<0;})),'Todos los tipos');
+      opciones($('fSitio'),d.catalogos.sitios,'Todos los sitios');
+      opciones($('fResp'),d.operadores,'Todos los responsables');
+    }
+    render();
+    if(S.sel && $('vDet').classList.contains('on')){
+      var t=buscar(S.sel);
+      if(t) pintarDetalle(t,false);
+      else { cerrar('vDet'); alert('La tarjeta '+S.sel+' ya no está en la pizarra (fue anulada o salió de los últimos 7 días).'); }
+    }
+  }
+  function buscar(id){ return (S.datos.tarjetas||[]).filter(function(t){return t.id===id;})[0]; }
+  function filtrar(t){
+    var q=$('fBuscar').value.trim().toLowerCase(), ti=$('fTipo').value, si=$('fSitio').value, re=$('fResp').value;
+    if(ti && t.tipo!==ti) return false;
+    if(si && t.sitio!==si) return false;
+    if(re && t.responsable!==re) return false;
+    if(q && (t.id+' '+t.titulo+' '+t.detalle).toLowerCase().indexOf(q)<0) return false;
+    return true;
+  }
+  function render(){
+    var d=S.datos, avisoT=d.catalogos.tiposAviso;
+    var todas=d.tarjetas.filter(filtrar);
+    var avisos=todas.filter(function(t){return avisoT.indexOf(t.tipo)>-1 && t.estado!=='Cerrado';})
+      .sort(function(a,b){return b.creacion.localeCompare(a.creacion);});
+    $('avisos').innerHTML = avisos.length ? avisos.map(htmlAviso).join('') : '<div class="vacio">No hay avisos vigentes.</div>';
+    var prioOrden={Alta:0,Media:1,Baja:2};
+    $('tablero').innerHTML = COLS.map(function(c){
+      var ts=todas.filter(function(t){return t.estado===c && avisoT.indexOf(t.tipo)<0;});
+      if(c==='Cerrado') ts=ts.concat(todas.filter(function(t){return t.estado==='Cerrado' && avisoT.indexOf(t.tipo)>-1;}));
+      ts.sort(function(a,b){ return c==='Cerrado' ? b.ultAct.localeCompare(a.ultAct) : ((prioOrden[a.prioridad]-prioOrden[b.prioridad]) || b.ultAct.localeCompare(a.ultAct)); });
+      return '<section class="col" data-col="'+esc(c)+'"><div class="col-h"><span>'+esc(c==='Cerrado'?'Cerrado (últimos 7 días)':c)+'</span><span class="n">'+ts.length+'</span></div>'+
+        (ts.length? ts.map(htmlTarjeta).join('') : '<div class="vacio">Sin tarjetas</div>')+'</section>';
+    }).join('');
+    enlazar();
+  }
+  function badgePrio(p){ return '<span class="badge p-'+slug(p)+'">'+esc(p)+'</span>'; }
+  function htmlTarjeta(t){
+    return '<article class="tarjeta t-'+slug(t.tipo)+'" draggable="true" data-id="'+esc(t.id)+'">'+
+      '<div class="fila1"><span>'+esc(t.id)+' · <span class="badge tipo">'+esc(t.tipo)+'</span></span>'+badgePrio(t.prioridad)+'</div>'+
+      '<div class="tit">'+esc(t.titulo)+'</div>'+
+      '<div class="meta">'+esc(t.sitio)+' · '+esc(t.categoria)+(t.responsable?'<br>Responsable: '+esc(t.responsable):'')+
+      (t.fecha?'<br><span class="'+(vencida(t)?'vencido':'')+'">Compromiso: '+fFecha(t.fecha)+(vencida(t)?' (vencido)':'')+'</span>':'')+'</div>'+
+      '<div class="ult">'+esc(t.actPor)+' · '+hace(t.ultAct)+(t.ultCom?': '+esc(t.ultCom.length>80?t.ultCom.slice(0,80)+'…':t.ultCom):'')+'</div>'+
+    '</article>';
+  }
+  function htmlAviso(t){
+    var yo=S.usuario.nombre, leyo=t.leido.indexOf(yo)>-1;
+    return '<div class="aviso t-'+slug(t.tipo)+'" data-id="'+esc(t.id)+'">'+
+      '<div class="fila1"><span>'+esc(t.id)+' · '+esc(t.tipo)+'</span>'+badgePrio(t.prioridad)+'</div>'+
+      '<div class="tit">'+esc(t.titulo)+'</div><div class="det">'+esc(t.detalle)+'</div>'+
+      '<div class="pie"><span class="leidos">'+esc(t.creadoPor)+' · '+fFecha(t.creacion,true)+'<br>Leído por: '+(t.leido.length?esc(t.leido.join(', ')):'nadie aún')+'</span>'+
+      (leyo?'<span class="badge p-baja">Leído</span>':'<button class="btn btn-p" data-leer="'+esc(t.id)+'">Confirmar lectura</button>')+'</div></div>';
+  }
+
+  /* ---------- eventos del tablero ---------- */
+  function enlazar(){
+    Array.prototype.forEach.call(document.querySelectorAll('.tarjeta,.aviso'),function(el){
+      el.addEventListener('click',function(ev){ if(ev.target.closest('[data-leer]')) return; verDetalle(el.getAttribute('data-id')); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-leer]'),function(b){
+      b.addEventListener('click',function(ev){ ev.stopPropagation(); accion(b.getAttribute('data-leer'),'Confirmar lectura',''); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.tarjeta'),function(el){
+      var t=buscar(el.getAttribute('data-id'));
+      if(t && esSoloCoord(t)){ el.setAttribute('draggable','false'); el.style.cursor='pointer'; return; }
+      el.addEventListener('dragstart',function(ev){ ev.dataTransfer.setData('text/plain',el.getAttribute('data-id')); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.col'),function(col){
+      col.addEventListener('dragover',function(ev){ ev.preventDefault(); col.classList.add('sobre'); });
+      col.addEventListener('dragleave',function(){ col.classList.remove('sobre'); });
+      col.addEventListener('drop',function(ev){
+        ev.preventDefault(); col.classList.remove('sobre');
+        var id=ev.dataTransfer.getData('text/plain'), t=buscar(id), destino=col.getAttribute('data-col');
+        if(!t || t.estado===destino || esSoloCoord(t)) return;
+        var acc = destino==='Cerrado' ? 'Cerrar' : (destino==='Abierto' ? 'Mover a Abierto' : 'Mover a En seguimiento');
+        S.mover={id:id,acc:acc};
+        $('mTit').textContent=id+': '+t.estado+' → '+destino; $('mCom').value=''; $('mErr').textContent='';
+        abrir('vMover'); setTimeout(function(){$('mCom').focus();},50);
+      });
+    });
+  }
+  $('mOk').onclick=function(){
+    var c=$('mCom').value.trim(); if(!c){ $('mErr').textContent='Escribe un comentario.'; return; }
+    if(S.ocupado) return;
+    accion(S.mover.id,S.mover.acc,c).then(function(ok){ if(ok) cerrar('vMover'); });
+  };
+  ['fBuscar','fTipo','fSitio','fResp'].forEach(function(id){ $(id).addEventListener('input',function(){ if(S.datos) render(); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-cerrar]'),function(b){ b.onclick=function(){ cerrar(b.getAttribute('data-cerrar')); }; });
+  Array.prototype.forEach.call(document.querySelectorAll('.velo'),function(v){
+    v.addEventListener('mousedown',function(ev){ if(ev.target===v && v.id!=='vLogin') cerrar(v.id); });
+  });
+
+  function accion(id,acc,com){
+    if(S.ocupado) return Promise.resolve(false); // evita doble clic
+    S.ocupado=true; ocupado(true);
+    var t=buscar(id), visto=t?t.estado:'';
+    return api('actualizarTarjeta',S.token,id,acc,com,visto).then(function(d){ S.ocupado=false; ocupado(false); aplicar(d); if(S.sel===id && $('vDet').classList.contains('on')) cargarHist(id); return true; })
+      .catch(function(e){
+        S.ocupado=false; ocupado(false); if(manejarSesion(e)) return false;
+        var m=msgErr(e);
+        if($('vDet').classList.contains('on')) $('dErr').textContent=m; else if($('vMover').classList.contains('on')) $('mErr').textContent=m; else alert(m);
+        cargar(true); // refresca: puede que otro operador ya cambió la tarjeta
+        return false; });
+  }
+
+  /* ---------- detalle ---------- */
+  function verDetalle(id){
+    var t=buscar(id); if(!t) return;
+    S.sel=id; $('dCom').value=''; $('dErr').textContent='';
+    pintarDetalle(t,true); abrir('vDet');
+  }
+  function pintarDetalle(t,conHist){
+    $('dId').textContent=t.id+' · '+t.estado;
+    $('dBadges').innerHTML='<span class="badge tipo">'+esc(t.tipo)+'</span> '+badgePrio(t.prioridad);
+    $('dTit').textContent=t.titulo;
+    $('dMeta').textContent=t.sitio+' · '+t.categoria+' · '+t.turno+' · Creado por '+t.creadoPor+' el '+fFecha(t.creacion,true)+
+      (t.responsable?' · Responsable: '+t.responsable:'')+(t.fecha?' · Compromiso: '+fFecha(t.fecha):'');
+    $('dTxt').textContent=t.detalle;
+    $('dLeido').textContent = S.datos.catalogos.tiposAviso.indexOf(t.tipo)>-1 ? 'Leído por: '+(t.leido.length?t.leido.join(', '):'nadie aún') : '';
+    var b=[], bloqueada=esSoloCoord(t);
+    if(t.estado!=='Cerrado') b.push(['Avance','btn']);
+    if(!bloqueada){
+      if(t.estado==='En seguimiento') b.push(['Mover a Abierto','btn']);
+      if(t.estado==='Abierto') b.push(['Mover a En seguimiento','btn']);
+      if(t.estado!=='Cerrado') b.push(['Cerrar','btn btn-p']); else b.push(['Reabrir','btn']);
+    }
+    if(S.datos.catalogos.tiposAviso.indexOf(t.tipo)>-1 && t.leido.indexOf(S.usuario.nombre)<0) b.unshift(['Confirmar lectura','btn btn-p']);
+    if(S.usuario.rol==='Coordinador') b.push(['Anular','btn btn-r']);
+    b.push(['Cerrar ventana','btn']);
+    $('dAcc').innerHTML=b.map(function(x){return '<button class="'+x[1]+'" data-acc="'+esc(x[0])+'">'+esc(x[0])+'</button>';}).join('');
+    Array.prototype.forEach.call($('dAcc').querySelectorAll('[data-acc]'),function(btn){
+      btn.onclick=function(){
+        var a=btn.getAttribute('data-acc');
+        if(a==='Cerrar ventana'){ cerrar('vDet'); return; }
+        var c=$('dCom').value.trim();
+        if(a!=='Confirmar lectura' && !c){ $('dErr').textContent='Escribe un comentario antes de '+a.toLowerCase()+'.'; $('dCom').focus(); return; }
+        if(a==='Anular' && !confirm('¿Anular '+t.id+'? Queda registrado y deja de verse en la pizarra.')) return;
+        $('dErr').textContent='';
+        accion(t.id,a,c).then(function(ok){ if(ok){ $('dCom').value=''; if(a==='Anular') cerrar('vDet'); } });
+      };
+    });
+    if(conHist) cargarHist(t.id);
+  }
+  function cargarHist(id){
+    $('dHist').innerHTML='<div class="vacio">Cargando…</div>';
+    api('obtenerHistorial',S.token,id).then(function(h){
+      $('dHist').innerHTML = h.length ? h.map(function(e){
+        return '<div class="ev"><div class="q">'+fFecha(e.fecha,true)+' · '+esc(e.operador)+'</div><div class="a">'+esc(e.accion)+
+          (e.anterior||e.nuevo? ' <span class="q">('+esc(e.anterior||'—')+' → '+esc(e.nuevo||'—')+')</span>':'')+'</div>'+
+          (e.detalle?'<div>'+esc(e.detalle)+'</div>':'')+'</div>';
+      }).join('') : '<div class="vacio">Sin historial.</div>';
+    }).catch(function(e){ if(!manejarSesion(e)) $('dHist').innerHTML='<div class="vacio">'+esc(msgErr(e))+'</div>'; });
+  }
+
+  /* ---------- nuevo ---------- */
+  $('btnNuevo').onclick=function(){
+    var c=S.datos.catalogos;
+    opciones($('nTipo'),c.tipos); opciones($('nPrio'),c.prioridades); $('nPrio').value='Media';
+    opciones($('nCat'),c.categorias); opciones($('nSitio'),c.sitios); opciones($('nTurno'),c.turnos);
+    opciones($('nResp'),S.datos.operadores,'(sin asignar)');
+    ['nTitulo','nDetalle','nFecha'].forEach(function(i){$(i).value='';}); $('nErr').textContent=''; S.reqId=null;
+    abrir('vNuevo'); setTimeout(function(){$('nTitulo').focus();},50);
+  };
+  $('nGuardar').onclick=function(){
+    var d={tipo:$('nTipo').value,prioridad:$('nPrio').value,categoria:$('nCat').value,sitio:$('nSitio').value,turno:$('nTurno').value,
+      responsable:$('nResp').value,titulo:$('nTitulo').value.trim(),detalle:$('nDetalle').value.trim(),fecha:$('nFecha').value};
+    if(!d.titulo||!d.detalle){ $('nErr').textContent='Completa el título y el detalle.'; return; }
+    if(S.ocupado) return;
+    if(!S.reqId) S.reqId=uuid();      // mismo código en reintentos: el servidor no duplica la tarjeta
+    d.reqId=S.reqId;
+    S.ocupado=true; ocupado(true);
+    api('crearTarjeta',S.token,d).then(function(r){ S.ocupado=false; S.reqId=null; ocupado(false); cerrar('vNuevo'); aplicar(r); })
+      .catch(function(e){ S.ocupado=false; ocupado(false); if(!manejarSesion(e)) $('nErr').textContent=msgErr(e); });
+  };
+
+  /* ---------- exportación (coordinador) ---------- */
+  $('btnExport').onclick=function(){
+    var hoy=hoyES(), lun=new Date(Date.now()-((new Date(hoy+'T12:00:00').getDay()+6)%7)*86400000).toLocaleDateString('en-CA',{timeZone:TZ});
+    $('eDesde').value=lun; $('eHasta').value=hoy; $('eErr').textContent=''; abrir('vExp');
+  };
+  Array.prototype.forEach.call(document.querySelectorAll('[data-exp]'),function(b){
+    b.onclick=function(){
+      var d=$('eDesde').value, h=$('eHasta').value, f=b.getAttribute('data-exp');
+      if(!d||!h){ $('eErr').textContent='Elige las dos fechas.'; return; }
+      if(S.ocupado) return;
+      $('eErr').textContent=''; S.ocupado=true; ocupado(true);
+      var p = f==='resumen' ? api('exportarResumen',S.token,d,h) : api('exportarHistorial',S.token,f,d,h);
+      p.then(function(r){ S.ocupado=false; ocupado(false); descargar(r); })
+       .catch(function(e){ S.ocupado=false; ocupado(false); if(!manejarSesion(e)) $('eErr').textContent=msgErr(e); });
+    };
+  });
+  function descargar(r){
+    var bin=atob(r.base64), u=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+    var url=URL.createObjectURL(new Blob([u],{type:r.mime})), a=document.createElement('a');
+    a.href=url; a.download=r.nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(url);},2000);
+  }
+
+  /* ---------- reloj y refresco ---------- */
+  function tic(){ $('reloj').textContent=new Date().toLocaleString('es-SV',{timeZone:TZ,weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }
+  tic(); setInterval(tic,30000);
+  setInterval(function(){ var abierto=document.querySelector('.velo.on'); if(S.token && !abierto) cargar(true); },60000);
+
+  /* ---------- modo demostración (solo fuera de Google) ---------- */
+  var Demo = (function(){
+    var ops=['Oscar','Operador 1','Operador 2','Operador 3','Operador 4','Operador 5'];
+    var roles={'Oscar':'Coordinador'};
+    var n=6, hist=[], ses=null;
+    function iso(h){ return new Date(Date.now()-h*3600000).toISOString(); }
+    var t=[
+      {id:'SM-0001',creacion:iso(30),creadoPor:'Oscar',tipo:'Instrucción nueva',categoria:'Relevo / turno',sitio:'Regional',turno:'Administrativo',titulo:'Relevo sin firma = no hay relevo',detalle:'A partir de hoy ningún operador deja el puesto si el relevo no llegó físicamente y ambos firmaron el checklist.',prioridad:'Alta',responsable:'',fecha:'',estado:'Abierto',ultAct:iso(30),actPor:'Oscar',ultCom:'',nAct:2,leido:['Operador 1','Operador 3']},
+      {id:'SM-0002',creacion:iso(20),creadoPor:'Operador 2',tipo:'Aviso importante',categoria:'Cámara / equipo',sitio:'Guatemala',turno:'Tarde (14:00–22:00)',titulo:'NVR de bodega GT sin grabación desde las 16:40',detalle:'Ticket abierto con el proveedor. Mientras tanto, rondas presenciales cada hora por el vigilante.',prioridad:'Alta',responsable:'Operador 2',fecha:iso(-24),estado:'En seguimiento',ultAct:iso(3),actPor:'Operador 4',ultCom:'Proveedor confirma visita mañana 9:00',nAct:3,leido:['Operador 4']},
+      {id:'SM-0003',creacion:iso(10),creadoPor:'Operador 1',tipo:'Seguimiento',categoria:'Revisión de video',sitio:'El Salvador',turno:'Noche (22:00–06:00)',titulo:'Revisar ingreso de vehículo sin registro en portón 2',detalle:'Placa parcial P-58…, 02:14 a.m. Solicitar bitácora de garita.',prioridad:'Media',responsable:'Operador 1',fecha:iso(-48),estado:'Abierto',ultAct:iso(10),actPor:'Operador 1',ultCom:'',nAct:0,leido:[]},
+      {id:'SM-0004',creacion:iso(50),creadoPor:'Operador 3',tipo:'Seguimiento',categoria:'Seguimiento GPS',sitio:'Honduras',turno:'Mañana (06:00–14:00)',titulo:'Unidad 214 con parada no autorizada de 40 min',detalle:'Ruta San Pedro Sula. Confirmar con jefe de transporte.',prioridad:'Media',responsable:'Operador 3',fecha:iso(30),estado:'En seguimiento',ultAct:iso(6),actPor:'Operador 3',ultCom:'Jefe de transporte confirma falla mecánica; pide reporte',nAct:2,leido:[]},
+      {id:'SM-0005',creacion:iso(70),creadoPor:'Operador 5',tipo:'Seguimiento',categoria:'Cámara / equipo',sitio:'Costa Rica',turno:'Tarde (14:00–22:00)',titulo:'Cámara 12 CEDI CR desenfocada',detalle:'Se solicitó ajuste al técnico local.',prioridad:'Baja',responsable:'Operador 5',fecha:'',estado:'Cerrado',ultAct:iso(5),actPor:'Operador 5',ultCom:'Técnico ajustó lente; imagen OK',nAct:2,leido:[]},
+      {id:'SM-0006',creacion:iso(4),creadoPor:'Oscar',tipo:'Cambio de actividad',categoria:'Otro',sitio:'Regional',turno:'Administrativo',titulo:'Reporte del viernes: entrega a las 14:00',detalle:'El administrativo entrega el consolidado de una página (indicadores, incidencias, pendientes).',prioridad:'Media',responsable:'',fecha:'',estado:'Abierto',ultAct:iso(4),actPor:'Oscar',ultCom:'',nAct:0,leido:[]}
+    ];
+    t.forEach(function(x){ hist.push({fecha:x.creacion,operador:x.creadoPor,accion:'CREAR',id:x.id,detalle:x.titulo,anterior:'',nuevo:'Abierto'}); if(x.ultCom) hist.push({fecha:x.ultAct,operador:x.actPor,accion:x.estado==='Cerrado'?'CERRAR':'AVANCE',id:x.id,detalle:x.ultCom,anterior:'Abierto',nuevo:x.estado}); });
+    function ok(v){ return new Promise(function(r){ setTimeout(function(){ r(JSON.parse(JSON.stringify(v))); },250); }); }
+    function no(m){ return new Promise(function(_,r){ setTimeout(function(){ r(new Error(m)); },250); }); }
+    function tablero(){ return ok({usuario:ses,tarjetas:t.filter(function(x){return x.estado!=='Anulado';}).map(function(x){ var c=JSON.parse(JSON.stringify(x)); c.fecha=c.fecha?c.fecha.slice(0,10):''; return c; }),operadores:ops,
+      catalogos:{tipos:ses.rol==='Coordinador'?['Seguimiento','Aviso importante','Instrucción nueva','Cambio de actividad','Otro']:['Seguimiento','Aviso importante','Cambio de actividad','Otro'],
+      tiposAviso:['Aviso importante','Instrucción nueva','Cambio de actividad'],tiposSoloCoord:['Instrucción nueva'],categorias:['Revisión de video','Seguimiento GPS','Cámara / equipo','Incidente','Relevo / turno','Otro'],
+      sitios:['El Salvador','Guatemala','Honduras','Nicaragua','Costa Rica','Regional'],turnos:['Mañana (06:00–14:00)','Tarde (14:00–22:00)','Noche (22:00–06:00)','Administrativo'],prioridades:['Alta','Media','Baja']},ahora:new Date().toISOString()}); }
+    return {
+      listarOperadores:function(){ return ok(ops); },
+      iniciarSesion:function(nom,pin){ if(String(pin)!=='1234') return no('PIN incorrecto. (En la vista previa el PIN es 1234)'); ses={nombre:nom,rol:roles[nom]||'Operador'}; return ok({token:'demo',nombre:nom,rol:ses.rol}); },
+      cerrarSesion:function(){ ses=null; return ok(true); },
+      obtenerTablero:function(){ return ses? tablero() : no('SESION_VENCIDA'); },
+      crearTarjeta:function(_,d){ var ahora=new Date().toISOString(); n++; var id='SM-'+('000'+n).slice(-4);
+        t.push({id:id,creacion:ahora,creadoPor:ses.nombre,tipo:d.tipo,categoria:d.categoria,sitio:d.sitio,turno:d.turno,titulo:d.titulo,detalle:d.detalle,prioridad:d.prioridad,responsable:d.responsable,fecha:d.fecha?new Date(d.fecha+'T12:00:00').toISOString():'',estado:'Abierto',ultAct:ahora,actPor:ses.nombre,ultCom:'',nAct:0,leido:[]});
+        hist.push({fecha:ahora,operador:ses.nombre,accion:'CREAR',id:id,detalle:d.titulo,anterior:'',nuevo:'Abierto'}); return tablero(); },
+      actualizarTarjeta:function(_,id,acc,com){
+        var x=t.filter(function(y){return y.id===id;})[0]; if(!x) return no('No existe');
+        if(acc==='Anular'&&ses.rol!=='Coordinador') return no('Solo el coordinador puede anular.');
+        var ant=x.estado, nuevo=ant, cod;
+        if(acc==='Avance'){cod='AVANCE'; if(ant==='Abierto') nuevo='En seguimiento';}
+        else if(acc==='Cerrar'){cod='CERRAR';nuevo='Cerrado';}
+        else if(acc==='Reabrir'||acc==='Mover a Abierto'){cod=ant==='Cerrado'?'REABRIR':'MOVER';nuevo='Abierto';}
+        else if(acc==='Mover a En seguimiento'){cod=ant==='Cerrado'?'REABRIR':'MOVER';nuevo='En seguimiento';}
+        else if(acc==='Anular'){cod='ANULAR';nuevo='Anulado';}
+        else if(acc==='Confirmar lectura'){cod='LECTURA'; if(x.leido.indexOf(ses.nombre)<0) x.leido.push(ses.nombre); com='Confirmó lectura';}
+        var ahora=new Date().toISOString(); x.estado=nuevo; x.ultAct=ahora; x.actPor=ses.nombre; if(cod!=='LECTURA') x.ultCom=com; x.nAct++;
+        hist.push({fecha:ahora,operador:ses.nombre,accion:cod,id:id,detalle:com,anterior:ant,nuevo:nuevo}); return tablero(); },
+      exportarHistorial:function(){ return no('La exportación solo funciona dentro de Google.'); },
+      exportarResumen:function(){ return no('La exportación solo funciona dentro de Google.'); },
+      obtenerHistorial:function(_,id){ return ok(hist.filter(function(h){return h.id===id;}).slice().reverse()); }
+    };
+  })();
+
+  /* ---------- arranque ---------- */
+  if(DEMO) $('demo').hidden=false;
+  var tk=DEMO?null:leerToken();
+  if(tk){ S.token=tk; cargar(); } else mostrarLogin('');
+})();
+</script>
+</body>
+</html>
