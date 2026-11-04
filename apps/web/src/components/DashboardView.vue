@@ -33,7 +33,7 @@ function barras(obj, color) {
 
 <template>
   <div v-if="!d" class="vacio">Cargando marcadores…</div>
-  <template v-else>
+  <div v-else class="dash">
     <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 12px">
       <h2 class="sec" style="margin:0">Marcadores</h2>
       <button class="btn" @click="cargarDashboard()">Actualizar</button>
@@ -47,28 +47,30 @@ function barras(obj, color) {
       <div class="kpi" :class="m.compromisoVencido > 0 ? 'alerta' : 't-naranja'"><div class="n">{{ m.compromisoVencido }}</div><div class="l">Compromiso vencido</div></div>
     </div>
 
-    <div class="panel">
-      <h3>Pendientes por sitio</h3>
-      <div class="barras">
-        <div v-if="!barrasSitio.length" class="vacio">Sin pendientes.</div>
-        <div v-for="b in barrasSitio" :key="b.k" class="barra-row">
-          <span>{{ b.k }}</span>
-          <span class="track"><span class="fill" :style="{ width: b.pct + '%' }"></span></span>
-          <span style="text-align:right">{{ b.v }}</span>
+    <div class="dash-panels">
+      <div class="panel">
+        <h3>Pendientes por sitio</h3>
+        <div class="barras">
+          <div v-if="!barrasSitio.length" class="vacio">Sin pendientes.</div>
+          <div v-for="b in barrasSitio" :key="b.k" class="barra-row">
+            <span>{{ b.k }}</span>
+            <span class="track"><span class="fill" :style="{ width: b.pct + '%' }"></span></span>
+            <span style="text-align:right">{{ b.v }}</span>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="panel">
-      <h3>Pendientes por prioridad</h3>
-      <div class="barras">
-        <div v-if="!barrasPrio.length" class="vacio">Sin pendientes.</div>
-        <div v-for="b in barrasPrio" :key="b.k" class="barra-row">
-          <span>{{ b.k }}</span>
-          <span class="track"><span class="fill" :style="{ width: b.pct + '%', background: b.color }"></span></span>
-          <span style="text-align:right">{{ b.v }}</span>
+      <div class="panel">
+        <h3>Pendientes por prioridad</h3>
+        <div class="barras">
+          <div v-if="!barrasPrio.length" class="vacio">Sin pendientes.</div>
+          <div v-for="b in barrasPrio" :key="b.k" class="barra-row">
+            <span>{{ b.k }}</span>
+            <span class="track"><span class="fill" :style="{ width: b.pct + '%', background: b.color }"></span></span>
+            <span style="text-align:right">{{ b.v }}</span>
+          </div>
         </div>
       </div>
     </div>
-  </template>
+  </div>
 </template>

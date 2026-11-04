@@ -113,7 +113,7 @@ onBeforeUnmount(() => { clearInterval(t1); clearInterval(t2) })
       </div>
     </main>
 
-    <main v-if="S.vista === 'dashboard'"><DashboardView /></main>
+    <main v-if="S.vista === 'dashboard'" class="main-dash"><DashboardView /></main>
     <main v-if="S.vista === 'historial' && esCoord"><HistorialView /></main>
     <main v-if="S.vista === 'usuarios' && esCoord"><UsuariosView /></main>
 
