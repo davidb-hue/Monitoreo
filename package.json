@@ -2,6 +2,7 @@
   "name": "monitoreo",
   "private": true,
   "version": "2.0.0",
+  "type": "module",
   "workspaces": ["apps/web", "apps/server"],
   "scripts": {
     "dev:web": "npm run dev:rest -w apps/web",

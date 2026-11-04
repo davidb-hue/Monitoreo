@@ -49,10 +49,19 @@ Solo ver el diseño con datos de ejemplo (sin base de datos): `npm run demo` (PI
 - **Concurrencia:** transacciones con bloqueo de fila; si otro operador cambió la tarjeta, se avisa en vez de pisar el cambio; el doble clic no duplica tarjetas.
 - Exportación del historial (CSV/PDF por rango de fechas) y resumen PDF para el reporte del viernes, solo coordinador.
 
-## Despliegue en Vercel (opcional)
-- **Servidor:** proyecto nuevo con *Root Directory* `apps/server`; variables `DATABASE_URL` (cadena *pooled* de Neon), `PEPPER` y, si la web va aparte, `CORS_ORIGIN`.
-- **Web:** otro proyecto con *Root Directory* `apps/web`, comando de build `npm run build:rest` y variable `VITE_API_URL` con la URL del servidor.
-- Alternativa más simple: un solo servidor Node (VM, Railway, Render…) con `npm run build && npm run start`.
+## Despliegue en Vercel (un solo proyecto)
+La raíz ya trae `vercel.json` y la función `api/index.js`: Vercel compila la web Vue y la sirve junto con la API Express en la misma URL (`/api/*` → función; el resto → la web).
+
+1. En Vercel: **Add New > Project**, importa `davidb-hue/Monitoreo`. Deja *Root Directory* en la raíz (`./`); no cambies el build (lo fija `vercel.json`).
+2. En **Settings > Environment Variables** agrega:
+   - `DATABASE_URL` = la cadena **pooled** de Neon (la que termina en `-pooler...`).
+   - `PEPPER` = el mismo secreto de tu `.env` local (si usas otro, los PIN no coincidirán).
+3. **Deploy.** Vercel te da la URL; esa es la que compartes con los operadores.
+
+Notas:
+- Los PIN se asignan con `npm run admin` apuntando a la misma base (desde tu equipo), no desde Vercel.
+- La exportación a PDF usa `pdfkit`; `vercel.json` ya incluye sus fuentes. Si un PDF fallara en producción, usa CSV y avísame.
+- Alternativa sin serverless: un servidor Node (Railway, Render, una VM) con `npm run build && npm run start`.
 
 ## Límites a tener en cuenta
 - Quien tenga la cadena de conexión del dueño de Neon puede alterar la base (los triggers protegen contra el uso normal y contra el usuario `pizarra_app`, no contra un superusuario que los elimine). Protege esa cuenta con 2FA.
