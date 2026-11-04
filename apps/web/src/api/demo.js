@@ -45,15 +45,15 @@ const no = (m) => new Promise((_, r) => setTimeout(() => r(new Error(m)), 160))
 const coord = () => ses && ses.rol === 'Coordinador'
 const registrar = (o) => hist.push({ fecha: new Date().toISOString(), operador: ses.nombre, accion: o.accion, id: o.id || '', tarjetaId: o.id || '', detalle: o.detalle || '', anterior: o.anterior || '', nuevo: o.nuevo || '' })
 
-function calcVence(d) {
-  if (d.venceHoras !== undefined && d.venceHoras !== '' && d.venceHoras !== null) {
-    const h = Number(d.venceHoras)
-    if (!(h > 0)) return null
-    return new Date(Date.now() + h * 3600000).toISOString()
+function calcMomento(baseMs, horas, fechaISO) {
+  if (horas !== undefined && horas !== '' && horas !== null) {
+    const h = Number(horas); if (!(h > 0)) return null
+    return new Date(baseMs + h * 3600000).toISOString()
   }
-  if (d.vence) { const v = new Date(d.vence); return isNaN(v) ? null : v.toISOString() }
+  if (fechaISO) { const v = new Date(fechaISO); return isNaN(v) ? null : v.toISOString() }
   return null
 }
+const calcVence = (d) => calcMomento(Date.now(), d.venceHoras, d.vence)
 
 function tablero() {
   return ok({
@@ -84,7 +84,9 @@ export const crearTarjeta = (_tk, d) => {
   const ahora = new Date().toISOString()
   n++
   const id = 'SM-' + ('000' + n).slice(-4)
-  t.push({ id, creacion: ahora, creadoPor: ses.nombre, tipo: d.tipo, categoria: d.categoria, sitio: d.sitio, turno: d.turno, titulo: d.titulo, detalle: d.detalle, prioridad: d.prioridad, responsable: d.responsable, fecha: d.fecha || '', estado: 'Abierto', ultAct: ahora, actPor: ses.nombre, ultCom: '', nAct: 0, leido: [], vence: calcVence(d) || '', cerradoEn: '' })
+  const inicia = calcMomento(Date.now(), d.iniciaHoras, d.inicia)
+  const vence = calcMomento(inicia ? new Date(inicia).getTime() : Date.now(), d.venceHoras, d.vence)
+  t.push({ id, creacion: ahora, creadoPor: ses.nombre, tipo: d.tipo, categoria: d.categoria, sitio: d.sitio, turno: d.turno, titulo: d.titulo, detalle: d.detalle, prioridad: d.prioridad, responsable: d.responsable, fecha: d.fecha || '', estado: 'Abierto', ultAct: ahora, actPor: ses.nombre, ultCom: '', nAct: 0, leido: [], vence: vence || '', inicia: inicia || '', cerradoEn: '' })
   registrar({ accion: 'CREAR', id, detalle: d.titulo, nuevo: 'Abierto' })
   return tablero()
 }

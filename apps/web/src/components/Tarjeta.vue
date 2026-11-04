@@ -1,13 +1,14 @@
 <script setup>
 import { computed } from 'vue'
 import { S, bloqueada } from '../store.js'
-import { slug, fFecha, hace, duracion, abiertaMs, slaInfo } from '../utils.js'
+import { slug, fFecha, hace, duracion, abiertaMs, slaInfo, programada } from '../utils.js'
 
 const props = defineProps({ t: { type: Object, required: true } })
 const emit = defineEmits(['abrir'])
 
 const fija = computed(() => bloqueada(props.t))
 const ultCom = computed(() => (props.t.ultCom && props.t.ultCom.length > 80 ? props.t.ultCom.slice(0, 80) + '…' : props.t.ultCom))
+const prog = computed(() => programada(props.t, S.ahora))
 const abierta = computed(() => {
   const ms = abiertaMs(props.t, S.ahora)
   if (ms == null) return ''
@@ -33,7 +34,8 @@ function arrastrar(ev) { ev.dataTransfer.setData('text/plain', props.t.id) }
       <template v-if="t.responsable"><br>Responsable: {{ t.responsable }}</template>
     </div>
     <div class="tiempo">
-      {{ abierta }}
+      <template v-if="prog"><span class="sla neutro">⏳ {{ prog }}</span></template>
+      <template v-else>{{ abierta }}</template>
       <span v-if="sla" class="sla" :class="{ rojo: sla.rojo, neutro: sla.cerrada }">{{ sla.texto }}</span>
     </div>
     <div class="ult">{{ t.actPor }} · {{ hace(t.ultAct) }}<template v-if="ultCom">: {{ ultCom }}</template></div>

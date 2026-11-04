@@ -7,6 +7,7 @@ const c = catalogos.value
 const f = reactive({
   tipo: c.tipos[0], prioridad: 'Media', categoria: c.categorias[0], sitio: c.sitios[0], turno: c.turnos[0],
   responsable: '', titulo: '', detalle: '', fecha: '',
+  iniciaModo: 'ninguno', iniciaHoras: '', iniciaFecha: '',
   venceModo: 'ninguno', venceHoras: '', venceFecha: '',
 })
 const err = ref('')
@@ -18,6 +19,13 @@ onMounted(() => inputTitulo.value?.focus())
 async function guardar() {
   if (!f.titulo.trim() || !f.detalle.trim()) { err.value = 'Completa el título y el detalle.'; return }
   const d = { tipo: f.tipo, prioridad: f.prioridad, categoria: f.categoria, sitio: f.sitio, turno: f.turno, responsable: f.responsable, titulo: f.titulo.trim(), detalle: f.detalle.trim(), fecha: f.fecha }
+  if (f.iniciaModo === 'horas') {
+    if (!(Number(f.iniciaHoras) > 0)) { err.value = 'Escribe en cuántas horas inicia.'; return }
+    d.iniciaHoras = Number(f.iniciaHoras)
+  } else if (f.iniciaModo === 'fecha') {
+    if (!f.iniciaFecha) { err.value = 'Elige la fecha y hora de inicio.'; return }
+    d.inicia = new Date(f.iniciaFecha).toISOString()
+  }
   if (f.venceModo === 'horas') {
     if (!(Number(f.venceHoras) > 0)) { err.value = 'Escribe cuántas horas para el tiempo de cierre.'; return }
     d.venceHoras = Number(f.venceHoras)
@@ -58,7 +66,14 @@ async function guardar() {
       <label>Detalle</label>
       <textarea v-model="f.detalle" placeholder="Qué pasó o qué se instruye, dónde, cámara/unidad, hora del evento y qué se hizo."></textarea>
       <div class="grid2">
-        <div><label>Fecha compromiso (opcional)</label><input v-model="f.fecha" type="date"></div>
+        <div>
+          <label>A partir de (opcional)</label>
+          <select v-model="f.iniciaModo">
+            <option value="ninguno">De inmediato</option>
+            <option value="horas">En horas</option>
+            <option value="fecha">Fecha y hora exactas</option>
+          </select>
+        </div>
         <div>
           <label>Tiempo máximo de gestión</label>
           <select v-model="f.venceModo">
@@ -67,15 +82,14 @@ async function guardar() {
             <option value="fecha">Fecha y hora exactas</option>
           </select>
         </div>
+        <div v-if="f.iniciaModo === 'horas'"><label>Inicia en (horas)</label><input v-model="f.iniciaHoras" type="number" min="1" max="2160" placeholder="Ej. 24"></div>
+        <div v-else-if="f.iniciaModo === 'fecha'"><label>Fecha y hora de inicio</label><input v-model="f.iniciaFecha" type="datetime-local"></div>
+        <div v-else></div>
+        <div v-if="f.venceModo === 'horas'"><label>Horas para gestionarlo</label><input v-model="f.venceHoras" type="number" min="1" max="2160" placeholder="Ej. 48"></div>
+        <div v-else-if="f.venceModo === 'fecha'"><label>Fecha y hora límite</label><input v-model="f.venceFecha" type="datetime-local"></div>
       </div>
-      <div v-if="f.venceModo === 'horas'">
-        <label>Horas para gestionarlo (se pone en rojo al pasarse)</label>
-        <input v-model="f.venceHoras" type="number" min="1" max="2160" placeholder="Ej. 24">
-      </div>
-      <div v-else-if="f.venceModo === 'fecha'">
-        <label>Fecha y hora límite</label>
-        <input v-model="f.venceFecha" type="datetime-local">
-      </div>
+      <div class="sub" v-if="f.iniciaModo !== 'ninguno'">El tiempo abierto y el límite de cierre empiezan a contar desde el inicio indicado (útil para solicitudes de video que arrancan 24 h después).</div>
+      <div><label>Fecha compromiso (opcional)</label><input v-model="f.fecha" type="date"></div>
       <div class="err">{{ err }}</div>
       <div class="acciones">
         <button class="btn" @click="S.modal = null">Cancelar</button>

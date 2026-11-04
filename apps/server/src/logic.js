@@ -45,17 +45,17 @@ function textoAFecha(t) {
   return !isNaN(d) && d.toLocaleDateString('en-CA', { timeZone: CFG.TZ }) === m[0] ? d : null
 }
 
-/** Límite de gestión (punto 6, híbrido): por horas desde "base", o por fecha/hora exacta ISO. null si no se define. */
-function calcularVence(base, d) {
-  const horas = Number(d.venceHoras)
-  if (d.venceHoras !== undefined && d.venceHoras !== '' && d.venceHoras !== null) {
-    if (!Number.isFinite(horas) || horas <= 0 || horas > CFG.MAX_VENCE_HORAS) throw new ErrorApp('Horas de cierre no válidas (1 a ' + CFG.MAX_VENCE_HORAS + ').')
-    return new Date(base.getTime() + horas * 3600000)
+/** Momento híbrido: por horas desde "base", o por fecha/hora exacta ISO. null si no se define. */
+function calcMomento(base, horas, fechaISO, etiqueta) {
+  if (horas !== undefined && horas !== '' && horas !== null) {
+    const h = Number(horas)
+    if (!Number.isFinite(h) || h <= 0 || h > CFG.MAX_VENCE_HORAS) throw new ErrorApp(`Horas de ${etiqueta} no válidas (1 a ${CFG.MAX_VENCE_HORAS}).`)
+    return new Date(base.getTime() + h * 3600000)
   }
-  if (d.vence) {
-    const v = new Date(d.vence)
-    if (isNaN(v)) throw new ErrorApp('Fecha y hora de cierre no válidas.')
-    if (v.getTime() - base.getTime() > 400 * 86400000) throw new ErrorApp('La fecha de cierre está demasiado lejos (máx. ~1 año).')
+  if (fechaISO) {
+    const v = new Date(fechaISO)
+    if (isNaN(v)) throw new ErrorApp(`Fecha y hora de ${etiqueta} no válidas.`)
+    if (v.getTime() - base.getTime() > 400 * 86400000) throw new ErrorApp(`La fecha de ${etiqueta} está demasiado lejos (máx. ~1 año).`)
     return v
   }
   return null
@@ -79,13 +79,13 @@ export function log(o, c = pool) {
 }
 
 const COLS = `id, creacion, creado_por, tipo, categoria, sitio, turno, titulo, detalle, prioridad, responsable,
-  COALESCE(fecha::text, '') AS fecha, estado, ult_act, act_por, ult_com, n_act, leido, vence, cerrado_en`
+  COALESCE(fecha::text, '') AS fecha, estado, ult_act, act_por, ult_com, n_act, leido, vence, inicia, cerrado_en`
 const iso = (d) => (d instanceof Date ? d.toISOString() : '')
 const aTarjeta = (r) => ({
   id: r.id, creacion: iso(r.creacion), creadoPor: r.creado_por, tipo: r.tipo, categoria: r.categoria, sitio: r.sitio, turno: r.turno,
   titulo: r.titulo, detalle: r.detalle, prioridad: r.prioridad, responsable: r.responsable, fecha: r.fecha, estado: r.estado,
   ultAct: iso(r.ult_act), actPor: r.act_por, ultCom: r.ult_com, nAct: r.n_act, leido: r.leido,
-  vence: iso(r.vence), cerradoEn: iso(r.cerrado_en),
+  vence: iso(r.vence), inicia: iso(r.inicia), cerradoEn: iso(r.cerrado_en),
 })
 
 /* ---------- operadores y sesión ---------- */
@@ -180,7 +180,9 @@ export async function crearTarjeta(s, d) {
   if (CFG.TIPOS_SOLO_COORD.includes(v.tipo) && !esCoord(s)) throw new ErrorApp('Solo el coordinador puede publicar instrucciones nuevas.', 403)
   if (v.responsable && !(await listarOperadores()).includes(v.responsable)) throw new ErrorApp('Responsable no válido.')
   if (v.fecha && !textoAFecha(v.fecha)) throw new ErrorApp('Fecha compromiso no válida.')
-  const vence = calcularVence(new Date(), d)
+  const ahora = new Date()
+  const inicia = calcMomento(ahora, d.iniciaHoras, d.inicia, 'inicio') // «a partir de»
+  const vence = calcMomento(inicia || ahora, d.venceHoras, d.vence, 'cierre') // el límite cuenta desde el inicio si lo hay
 
   await tx(async (c) => {
     if (v.reqId) {
@@ -188,11 +190,12 @@ export async function crearTarjeta(s, d) {
       if (!r.rowCount) return
     }
     const { rows: [t] } = await c.query(
-      `INSERT INTO tarjetas(creado_por,tipo,categoria,sitio,turno,titulo,detalle,prioridad,responsable,fecha,vence,act_por)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$1) RETURNING id`,
-      [s.nombre, v.tipo, v.categoria, v.sitio, v.turno, v.titulo, v.detalle, v.prioridad, v.responsable, v.fecha || null, vence])
+      `INSERT INTO tarjetas(creado_por,tipo,categoria,sitio,turno,titulo,detalle,prioridad,responsable,fecha,vence,inicia,act_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$1) RETURNING id`,
+      [s.nombre, v.tipo, v.categoria, v.sitio, v.turno, v.titulo, v.detalle, v.prioridad, v.responsable, v.fecha || null, vence, inicia])
     if (v.reqId) await c.query('UPDATE solicitudes SET tarjeta_id=$1 WHERE req_id=$2', [t.id, v.reqId])
-    await log({ operador: s.nombre, accion: 'CREAR', id: t.id, detalle: `${v.tipo} · ${v.titulo} · ${v.detalle}` + (vence ? ` · Límite: ${fmtTZ(vence)}` : ''), nuevo: 'Abierto' }, c)
+    const extra = (inicia ? ` · Inicia: ${fmtTZ(inicia)}` : '') + (vence ? ` · Límite: ${fmtTZ(vence)}` : '')
+    await log({ operador: s.nombre, accion: 'CREAR', id: t.id, detalle: `${v.tipo} · ${v.titulo} · ${v.detalle}${extra}`, nuevo: 'Abierto' }, c)
   })
   return tablero(s)
 }
@@ -264,7 +267,7 @@ export async function fijarVencimiento(s, id, d, comentario) {
     if (t.estado === 'Anulado') throw new ErrorApp('Esta tarjeta está anulada.')
     if (CFG.TIPOS_SOLO_COORD.includes(t.tipo) && !esCoord(s)) throw new ErrorApp('Solo el coordinador gestiona las instrucciones.', 403)
     const quitar = d.quitar === true || d.quitar === 'true'
-    const vence = quitar ? null : calcularVence(new Date(), d)
+    const vence = quitar ? null : calcMomento(new Date(), d.venceHoras, d.vence, 'cierre')
     if (!quitar && !vence) throw new ErrorApp('Indica las horas o la fecha y hora de cierre.')
     await c.query('UPDATE tarjetas SET vence=$1, ult_act=now(), act_por=$2, n_act=n_act+1 WHERE id=$3', [vence, s.nombre, id])
     await log({ operador: s.nombre, accion: 'VENCIMIENTO', id, detalle: comentario, anterior: t.vence ? fmtTZ(t.vence) : '—', nuevo: vence ? fmtTZ(vence) : 'sin límite' }, c)

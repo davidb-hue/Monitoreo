@@ -9,24 +9,25 @@ const kpis = computed(() => {
   if (!d.value) return []
   const m = d.value.marcadores, tt = d.value.totales
   return [
-    { l: 'Pendientes', n: tt.pendientes, alerta: false },
-    { l: 'Abiertos', n: tt.Abierto, alerta: false },
-    { l: 'En seguimiento', n: tt['En seguimiento'], alerta: false },
-    { l: 'Vencidos (tiempo de cierre)', n: m.vencidos, alerta: m.vencidos > 0 },
-    { l: 'Sin movimiento +48 h', n: m.sinMov48, alerta: m.sinMov48 > 0 },
-    { l: 'Avisos sin leer por todos', n: m.sinLeer, alerta: m.sinLeer > 0 },
-    { l: 'Creados (7 días)', n: m.creados7, alerta: false },
-    { l: 'Cerrados (7 días)', n: m.cerrados7, alerta: false },
+    { l: 'Pendientes', n: tt.pendientes, tono: 'azul', alerta: false },
+    { l: 'Abiertos', n: tt.Abierto, tono: 'celeste', alerta: false },
+    { l: 'En seguimiento', n: tt['En seguimiento'], tono: 'naranja', alerta: false },
+    { l: 'Vencidos (tiempo de cierre)', n: m.vencidos, tono: 'rojo', alerta: m.vencidos > 0 },
+    { l: 'Sin movimiento +48 h', n: m.sinMov48, tono: 'rojo', alerta: m.sinMov48 > 0 },
+    { l: 'Avisos sin leer por todos', n: m.sinLeer, tono: 'rojo', alerta: m.sinLeer > 0 },
+    { l: 'Creados (7 días)', n: m.creados7, tono: 'verde', alerta: false },
+    { l: 'Cerrados (7 días)', n: m.cerrados7, tono: 'verde', alerta: false },
   ]
 })
 
+const COLOR_PRIO = { Alta: 'var(--rojo)', Media: 'var(--ambar)', Baja: 'var(--verde)' }
 const barrasSitio = computed(() => barras(d.value?.porSitio))
-const barrasPrio = computed(() => barras(d.value?.porPrioridad))
-function barras(obj) {
+const barrasPrio = computed(() => barras(d.value?.porPrioridad, (k) => COLOR_PRIO[k]))
+function barras(obj, color) {
   if (!obj) return []
   const ent = Object.entries(obj).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
   const max = Math.max(1, ...ent.map(([, v]) => v))
-  return ent.map(([k, v]) => ({ k, v, pct: Math.round((v / max) * 100) }))
+  return ent.map(([k, v]) => ({ k, v, pct: Math.round((v / max) * 100), color: color ? color(k) : '' }))
 }
 </script>
 
@@ -38,14 +39,12 @@ function barras(obj) {
       <button class="btn" @click="cargarDashboard()">Actualizar</button>
     </div>
     <div class="kpis">
-      <div v-for="k in kpis" :key="k.l" class="kpi" :class="{ alerta: k.alerta }">
+      <div v-for="k in kpis" :key="k.l" class="kpi" :class="k.alerta ? 'alerta' : 't-' + k.tono">
         <div class="n">{{ k.n }}</div>
         <div class="l">{{ k.l }}</div>
       </div>
-    </div>
-    <div class="kpis" style="margin-top:12px;grid-template-columns:repeat(2,1fr)">
-      <div class="kpi"><div class="n">{{ m.promedioHoras }} h</div><div class="l">Tiempo promedio abierto (cerrados 7 días)</div></div>
-      <div class="kpi" :class="{ alerta: m.compromisoVencido > 0 }"><div class="n">{{ m.compromisoVencido }}</div><div class="l">Con fecha compromiso vencida</div></div>
+      <div class="kpi t-celeste"><div class="n">{{ m.promedioHoras }} h</div><div class="l">Promedio abierto (cerrados 7 d)</div></div>
+      <div class="kpi" :class="m.compromisoVencido > 0 ? 'alerta' : 't-naranja'"><div class="n">{{ m.compromisoVencido }}</div><div class="l">Compromiso vencido</div></div>
     </div>
 
     <div class="panel">
@@ -66,7 +65,7 @@ function barras(obj) {
         <div v-if="!barrasPrio.length" class="vacio">Sin pendientes.</div>
         <div v-for="b in barrasPrio" :key="b.k" class="barra-row">
           <span>{{ b.k }}</span>
-          <span class="track"><span class="fill" :style="{ width: b.pct + '%' }"></span></span>
+          <span class="track"><span class="fill" :style="{ width: b.pct + '%', background: b.color }"></span></span>
           <span style="text-align:right">{{ b.v }}</span>
         </div>
       </div>

@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS tarjetas (
   n_act       int NOT NULL DEFAULT 0,
   leido       text[] NOT NULL DEFAULT '{}',
   vence       timestamptz,                       -- tiempo máximo de gestión (opcional)
+  inicia      timestamptz,                       -- «a partir de»: cuándo empieza a gestionarse (opcional)
   cerrado_en  timestamptz                        -- momento de cierre (para el tiempo que estuvo abierta)
 );
 CREATE INDEX IF NOT EXISTS ix_tarjetas_estado ON tarjetas (estado, ult_act);

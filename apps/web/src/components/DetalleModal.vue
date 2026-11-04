@@ -70,6 +70,7 @@ onMounted(cargarHist)
       <div class="sub">
         {{ t.sitio }} · {{ t.categoria }} · {{ t.turno }} · Creado por {{ t.creadoPor }} el {{ fFecha(t.creacion, true) }}
         <template v-if="t.responsable"> · Responsable: {{ t.responsable }}</template>
+        <template v-if="t.inicia"> · A partir de: {{ fFecha(t.inicia, true) }}</template>
         <template v-if="t.fecha"> · Compromiso: {{ fFecha(t.fecha) }}</template>
       </div>
       <div class="tiempo" style="margin:6px 0">

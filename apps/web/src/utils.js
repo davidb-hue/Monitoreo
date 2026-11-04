@@ -48,12 +48,20 @@ export function duracion(ms) {
   return d + ' d' + (hr ? ' ' + hr + ' h' : '')
 }
 
-/** Tiempo que la tarjeta lleva (o estuvo) abierta, en ms. */
+/** Tiempo que la tarjeta lleva (o estuvo) abierta, en ms. Cuenta desde «a partir de» si existe. */
 export function abiertaMs(t, ahora) {
   if (!t.creacion) return null
-  const ini = new Date(t.creacion).getTime()
+  const ini = (t.inicia ? new Date(t.inicia) : new Date(t.creacion)).getTime()
   const fin = (t.estado === 'Cerrado' && t.cerradoEn) ? new Date(t.cerradoEn).getTime() : (ahora || Date.now())
   return fin - ini
+}
+
+/** Si la tarjeta tiene «a partir de» en el futuro, devuelve el texto; null si ya inició o no tiene. */
+export function programada(t, ahora) {
+  if (!t.inicia) return null
+  const now = ahora || Date.now()
+  const ini = new Date(t.inicia).getTime()
+  return ini > now ? 'Inicia en ' + duracion(ini - now) : null
 }
 
 /** Marcador del tiempo máximo de gestión (punto 6). rojo = vencido y sin cerrar. */

@@ -65,6 +65,10 @@ onBeforeUnmount(() => { clearInterval(t1); clearInterval(t2) })
 
 <template>
   <header>
+    <span class="marca">
+      <img src="/img/lactolac.png" alt="Lactolac">
+      <img src="/img/yes.png" alt="Yogurt YES">
+    </span>
     <h1>Pizarra de Monitoreo</h1>
     <span class="reloj">{{ reloj }}</span>
     <nav v-if="S.usuario" class="nav">
