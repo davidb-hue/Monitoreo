@@ -1,0 +1,14 @@
+{
+  "name": "monitoreo",
+  "private": true,
+  "version": "2.0.0",
+  "workspaces": ["apps/web", "apps/server"],
+  "scripts": {
+    "dev:web": "npm run dev:rest -w apps/web",
+    "dev:server": "npm run dev -w apps/server",
+    "build": "npm run build:rest -w apps/web",
+    "start": "npm run start -w apps/server",
+    "demo": "npm run dev -w apps/web",
+    "admin": "npm run admin -w apps/server --"
+  }
+}
