@@ -18,6 +18,7 @@ export const CFG = {
   SESION_MS: 6 * 3600 * 1000,
   MAX_INTENTOS: 5,
   BLOQUEO_MS: 15 * 60 * 1000,
+  MAX_VENCE_HORAS: 2160, // 90 días
   ROL_COORD: 'Coordinador',
 }
 
@@ -44,6 +45,22 @@ function textoAFecha(t) {
   return !isNaN(d) && d.toLocaleDateString('en-CA', { timeZone: CFG.TZ }) === m[0] ? d : null
 }
 
+/** Límite de gestión (punto 6, híbrido): por horas desde "base", o por fecha/hora exacta ISO. null si no se define. */
+function calcularVence(base, d) {
+  const horas = Number(d.venceHoras)
+  if (d.venceHoras !== undefined && d.venceHoras !== '' && d.venceHoras !== null) {
+    if (!Number.isFinite(horas) || horas <= 0 || horas > CFG.MAX_VENCE_HORAS) throw new ErrorApp('Horas de cierre no válidas (1 a ' + CFG.MAX_VENCE_HORAS + ').')
+    return new Date(base.getTime() + horas * 3600000)
+  }
+  if (d.vence) {
+    const v = new Date(d.vence)
+    if (isNaN(v)) throw new ErrorApp('Fecha y hora de cierre no válidas.')
+    if (v.getTime() - base.getTime() > 400 * 86400000) throw new ErrorApp('La fecha de cierre está demasiado lejos (máx. ~1 año).')
+    return v
+  }
+  return null
+}
+
 function rango(desde, hasta) {
   const a = textoAFecha(desde), b = textoAFecha(hasta)
   if (!a || !b) throw new ErrorApp('Fechas no válidas.')
@@ -62,11 +79,13 @@ export function log(o, c = pool) {
 }
 
 const COLS = `id, creacion, creado_por, tipo, categoria, sitio, turno, titulo, detalle, prioridad, responsable,
-  COALESCE(fecha::text, '') AS fecha, estado, ult_act, act_por, ult_com, n_act, leido`
+  COALESCE(fecha::text, '') AS fecha, estado, ult_act, act_por, ult_com, n_act, leido, vence, cerrado_en`
+const iso = (d) => (d instanceof Date ? d.toISOString() : '')
 const aTarjeta = (r) => ({
-  id: r.id, creacion: r.creacion.toISOString(), creadoPor: r.creado_por, tipo: r.tipo, categoria: r.categoria, sitio: r.sitio, turno: r.turno,
+  id: r.id, creacion: iso(r.creacion), creadoPor: r.creado_por, tipo: r.tipo, categoria: r.categoria, sitio: r.sitio, turno: r.turno,
   titulo: r.titulo, detalle: r.detalle, prioridad: r.prioridad, responsable: r.responsable, fecha: r.fecha, estado: r.estado,
-  ultAct: r.ult_act.toISOString(), actPor: r.act_por, ultCom: r.ult_com, nAct: r.n_act, leido: r.leido,
+  ultAct: iso(r.ult_act), actPor: r.act_por, ultCom: r.ult_com, nAct: r.n_act, leido: r.leido,
+  vence: iso(r.vence), cerradoEn: iso(r.cerrado_en),
 })
 
 /* ---------- operadores y sesión ---------- */
@@ -78,10 +97,9 @@ export async function listarOperadores() {
 export async function iniciarSesion(nombre, pin) {
   nombre = String(nombre || '').trim().slice(0, 80)
   pin = String(pin || '').trim().slice(0, 12)
-  // La transacción devuelve el resultado (no lanza) para que el conteo de intentos fallidos SÍ se guarde.
   const r = await tx(async (c) => {
     const { rows: [op] } = await c.query('SELECT * FROM operadores WHERE nombre=$1 AND activo FOR UPDATE', [nombre])
-    if (!op) return { error: 'Operador no válido.' } // no se registra: evita llenar el historial con basura
+    if (!op) return { error: 'Operador no válido.' }
     const ahora = Date.now()
     let intentos = op.intentos
     if (intentos >= CFG.MAX_INTENTOS) {
@@ -109,7 +127,6 @@ export async function iniciarSesion(nombre, pin) {
   return r.ok
 }
 
-/** Valida el token y relee rol/activo en cada llamada: una baja o cambio de rol surte efecto de inmediato. */
 export async function sesion(token) {
   if (typeof token !== 'string' || token.length < 20 || token.length > 128) throw new ErrorApp('SESION_VENCIDA', 401)
   const { rows: [f] } = await pool.query(
@@ -125,20 +142,20 @@ export async function cerrarSesion(token, s) {
   return true
 }
 
-const soloCoord = (s) => { if (s.rol !== CFG.ROL_COORD) throw new ErrorApp('Solo el coordinador puede exportar.', 403) }
+const esCoord = (s) => s.rol === CFG.ROL_COORD
+const soloCoord = (s) => { if (!esCoord(s)) throw new ErrorApp('Solo el administrador (coordinador) puede hacer esto.', 403) }
 
 /* ---------- tablero ---------- */
 export async function tablero(s) {
   const limite = new Date(Date.now() - CFG.DIAS_CERRADOS_VISIBLES * 86400000)
   const { rows } = await pool.query(
     `SELECT ${COLS} FROM tarjetas WHERE estado IN ('Abierto','En seguimiento') OR (estado='Cerrado' AND ult_act >= $1)`, [limite])
-  const coord = s.rol === CFG.ROL_COORD
   return {
     usuario: s,
     tarjetas: rows.map(aTarjeta),
     operadores: await listarOperadores(),
     catalogos: {
-      tipos: coord ? CFG.TIPOS : CFG.TIPOS.filter((t) => !CFG.TIPOS_SOLO_COORD.includes(t)),
+      tipos: esCoord(s) ? CFG.TIPOS : CFG.TIPOS.filter((t) => !CFG.TIPOS_SOLO_COORD.includes(t)),
       tiposAviso: CFG.TIPOS_AVISO, tiposSoloCoord: CFG.TIPOS_SOLO_COORD,
       categorias: CFG.CATEGORIAS, sitios: CFG.SITIOS, turnos: CFG.TURNOS, prioridades: CFG.PRIORIDADES,
     },
@@ -160,21 +177,22 @@ export async function crearTarjeta(s, d) {
   if (!CFG.SITIOS.includes(v.sitio)) throw new ErrorApp('Sitio no válido.')
   if (!CFG.TURNOS.includes(v.turno)) throw new ErrorApp('Turno no válido.')
   if (!CFG.PRIORIDADES.includes(v.prioridad)) throw new ErrorApp('Prioridad no válida.')
-  if (CFG.TIPOS_SOLO_COORD.includes(v.tipo) && s.rol !== CFG.ROL_COORD) throw new ErrorApp('Solo el coordinador puede publicar instrucciones nuevas.', 403)
+  if (CFG.TIPOS_SOLO_COORD.includes(v.tipo) && !esCoord(s)) throw new ErrorApp('Solo el coordinador puede publicar instrucciones nuevas.', 403)
   if (v.responsable && !(await listarOperadores()).includes(v.responsable)) throw new ErrorApp('Responsable no válido.')
   if (v.fecha && !textoAFecha(v.fecha)) throw new ErrorApp('Fecha compromiso no válida.')
+  const vence = calcularVence(new Date(), d)
 
   await tx(async (c) => {
-    if (v.reqId) { // doble clic / reintento: la clave primaria garantiza que solo uno cree la tarjeta
+    if (v.reqId) {
       const r = await c.query('INSERT INTO solicitudes(req_id) VALUES ($1) ON CONFLICT DO NOTHING', [v.reqId])
       if (!r.rowCount) return
     }
     const { rows: [t] } = await c.query(
-      `INSERT INTO tarjetas(creado_por,tipo,categoria,sitio,turno,titulo,detalle,prioridad,responsable,fecha,act_por)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$1) RETURNING id`,
-      [s.nombre, v.tipo, v.categoria, v.sitio, v.turno, v.titulo, v.detalle, v.prioridad, v.responsable, v.fecha || null])
+      `INSERT INTO tarjetas(creado_por,tipo,categoria,sitio,turno,titulo,detalle,prioridad,responsable,fecha,vence,act_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$1) RETURNING id`,
+      [s.nombre, v.tipo, v.categoria, v.sitio, v.turno, v.titulo, v.detalle, v.prioridad, v.responsable, v.fecha || null, vence])
     if (v.reqId) await c.query('UPDATE solicitudes SET tarjeta_id=$1 WHERE req_id=$2', [t.id, v.reqId])
-    await log({ operador: s.nombre, accion: 'CREAR', id: t.id, detalle: `${v.tipo} · ${v.titulo} · ${v.detalle}`, nuevo: 'Abierto' }, c)
+    await log({ operador: s.nombre, accion: 'CREAR', id: t.id, detalle: `${v.tipo} · ${v.titulo} · ${v.detalle}` + (vence ? ` · Límite: ${fmtTZ(vence)}` : ''), nuevo: 'Abierto' }, c)
   })
   return tablero(s)
 }
@@ -184,7 +202,7 @@ export async function actualizarTarjeta(s, id, accion, comentario, estadoVisto) 
   if (!CFG.ACCIONES.includes(accion)) throw new ErrorApp('Acción no válida.')
   comentario = String(comentario || '').trim().slice(0, 3000)
   if (accion !== 'Confirmar lectura' && !comentario) throw new ErrorApp('Escribe un comentario: queda en el historial.')
-  if (accion === 'Anular' && s.rol !== CFG.ROL_COORD) throw new ErrorApp('Solo el coordinador puede anular.', 403)
+  if (accion === 'Anular' && !esCoord(s)) throw new ErrorApp('Solo el coordinador puede anular.', 403)
   id = String(id || ''); estadoVisto = String(estadoVisto || '')
 
   await tx(async (c) => {
@@ -196,7 +214,6 @@ export async function actualizarTarjeta(s, id, accion, comentario, estadoVisto) 
     if (accion === 'Confirmar lectura') {
       if (!CFG.TIPOS_AVISO.includes(t.tipo)) throw new ErrorApp('Esta tarjeta no requiere confirmar lectura.')
       if (t.leido.includes(s.nombre)) return
-      // La lectura NO altera estado, "última actualización" ni "último comentario".
       await c.query('UPDATE tarjetas SET leido = array_append(leido, $1) WHERE id=$2', [s.nombre, id])
       await log({ operador: s.nombre, accion: 'LECTURA', id, detalle: 'Confirmó lectura' }, c)
       return
@@ -205,7 +222,7 @@ export async function actualizarTarjeta(s, id, accion, comentario, estadoVisto) 
     if (estadoVisto && estadoVisto !== ant) {
       throw new ErrorApp(`Otro operador cambió esta tarjeta mientras la veías (ahora está en «${ant}»). Se actualizó el tablero; revisa y repite si hace falta.`, 409)
     }
-    if (CFG.TIPOS_SOLO_COORD.includes(t.tipo) && s.rol !== CFG.ROL_COORD && accion !== 'Avance') {
+    if (CFG.TIPOS_SOLO_COORD.includes(t.tipo) && !esCoord(s) && accion !== 'Avance') {
       throw new ErrorApp('Las instrucciones solo las mueve, cierra o anula el coordinador. Puedes registrar un avance o confirmar lectura.', 403)
     }
     let nuevo = ant, codigo
@@ -228,15 +245,154 @@ export async function actualizarTarjeta(s, id, accion, comentario, estadoVisto) 
     }
     const ahora = new Date()
     await c.query('UPDATE tarjetas SET estado=$1, ult_act=$2, act_por=$3, ult_com=$4, n_act=n_act+1 WHERE id=$5', [nuevo, ahora, s.nombre, comentario, id])
+    // Punto 5: al cerrar se marca el momento; al reabrir se borra para volver a contar como abierta.
+    if (nuevo === 'Cerrado') await c.query('UPDATE tarjetas SET cerrado_en=$1 WHERE id=$2', [ahora, id])
+    else if (ant === 'Cerrado') await c.query('UPDATE tarjetas SET cerrado_en=NULL WHERE id=$1', [id])
     await log({ fecha: ahora, operador: s.nombre, accion: codigo, id, detalle: comentario, anterior: ant, nuevo }, c)
   })
   return tablero(s)
 }
 
-export async function historial(id) {
+/** Punto 6: fijar o cambiar el tiempo máximo de gestión de una tarjeta. */
+export async function fijarVencimiento(s, id, d, comentario) {
+  id = String(id || '')
+  comentario = String(comentario || '').trim().slice(0, 3000)
+  if (!comentario) throw new ErrorApp('Escribe un comentario: queda en el historial.')
+  await tx(async (c) => {
+    const { rows: [t] } = await c.query('SELECT id, estado, tipo, vence FROM tarjetas WHERE id=$1 FOR UPDATE', [id])
+    if (!t) throw new ErrorApp(`No se encontró la tarjeta ${id}.`, 404)
+    if (t.estado === 'Anulado') throw new ErrorApp('Esta tarjeta está anulada.')
+    if (CFG.TIPOS_SOLO_COORD.includes(t.tipo) && !esCoord(s)) throw new ErrorApp('Solo el coordinador gestiona las instrucciones.', 403)
+    const quitar = d.quitar === true || d.quitar === 'true'
+    const vence = quitar ? null : calcularVence(new Date(), d)
+    if (!quitar && !vence) throw new ErrorApp('Indica las horas o la fecha y hora de cierre.')
+    await c.query('UPDATE tarjetas SET vence=$1, ult_act=now(), act_por=$2, n_act=n_act+1 WHERE id=$3', [vence, s.nombre, id])
+    await log({ operador: s.nombre, accion: 'VENCIMIENTO', id, detalle: comentario, anterior: t.vence ? fmtTZ(t.vence) : '—', nuevo: vence ? fmtTZ(vence) : 'sin límite' }, c)
+  })
+  return tablero(s)
+}
+
+/** Historial por tarjeta. Solo administrador (punto 4). */
+export async function obtenerHistorial(s, id) {
+  soloCoord(s)
   const { rows } = await pool.query(
     'SELECT fecha, operador, accion, detalle, anterior, nuevo FROM historial WHERE tarjeta_id=$1 ORDER BY id DESC', [String(id || '')])
   return rows.map((r) => ({ ...r, fecha: r.fecha.toISOString() }))
+}
+
+/** Historial global con filtros. Solo administrador. */
+export async function historialGlobal(s, f = {}) {
+  soloCoord(s)
+  const cond = [], args = []
+  if (f.desde && f.hasta) { const r = rango(f.desde, f.hasta); args.push(r.d0, r.d1); cond.push(`fecha >= $${args.length - 1} AND fecha < $${args.length}`) }
+  if (f.operador) { args.push(String(f.operador)); cond.push(`operador = $${args.length}`) }
+  if (f.accion) { args.push(String(f.accion)); cond.push(`accion = $${args.length}`) }
+  if (f.id) { args.push(String(f.id)); cond.push(`tarjeta_id = $${args.length}`) }
+  if (f.q) { args.push('%' + String(f.q).toLowerCase() + '%'); cond.push(`(lower(detalle) LIKE $${args.length} OR lower(tarjeta_id) LIKE $${args.length} OR lower(operador) LIKE $${args.length})`) }
+  const limite = Math.min(Math.max(Number(f.limite) || 300, 1), 1000)
+  const where = cond.length ? 'WHERE ' + cond.join(' AND ') : ''
+  const { rows } = await pool.query(
+    `SELECT fecha, operador, accion, tarjeta_id, detalle, anterior, nuevo FROM historial ${where} ORDER BY id DESC LIMIT ${limite}`, args)
+  return { total: rows.length, limite, filas: rows.map((r) => ({ ...r, fecha: r.fecha.toISOString(), tarjetaId: r.tarjeta_id })) }
+}
+
+/* ---------- dashboard (marcadores) ---------- */
+export async function dashboard(s) {
+  const hoy = hoyTZ()
+  const semana = new Date(Date.now() - 7 * 86400000)
+  const nOper = (await listarOperadores()).length
+  const { rows: todas } = await pool.query(`SELECT ${COLS} FROM tarjetas`)
+  const activas = todas.filter((t) => t.estado !== 'Anulado')
+  const pend = todas.filter((t) => t.estado === 'Abierto' || t.estado === 'En seguimiento')
+  const porEstado = { Abierto: 0, 'En seguimiento': 0, Cerrado: 0, Anulado: 0 }
+  const porSitio = {}, porPrioridad = { Alta: 0, Media: 0, Baja: 0 }
+  activas.forEach((t) => { porSitio[t.sitio] = (porSitio[t.sitio] || 0) + 1 })
+  todas.forEach((t) => { porEstado[t.estado] = (porEstado[t.estado] || 0) + 1 })
+  pend.forEach((t) => { porPrioridad[t.prioridad] = (porPrioridad[t.prioridad] || 0) + 1 })
+  const ahora = Date.now()
+  const vencidos = pend.filter((t) => t.vence && new Date(t.vence).getTime() < ahora).length
+  const compromisoVencido = pend.filter((t) => t.fecha && t.fecha < hoy).length
+  const sinMov48 = pend.filter((t) => ahora - new Date(t.ult_act).getTime() > 48 * 3600000).length
+  const sinLeer = pend.filter((t) => CFG.TIPOS_AVISO.includes(t.tipo) && t.leido.length < nOper).length
+  const creados7 = activas.filter((t) => t.creacion >= semana).length
+  const cerr = todas.filter((t) => t.estado === 'Cerrado' && t.cerrado_en && t.cerrado_en >= semana)
+  const horas = cerr.map((t) => (new Date(t.cerrado_en).getTime() - new Date(t.creacion).getTime()) / 3600000)
+  const promedioHoras = horas.length ? Math.round((horas.reduce((a, b) => a + b, 0) / horas.length) * 10) / 10 : 0
+  return {
+    usuario: s, ahora: new Date().toISOString(),
+    totales: { pendientes: pend.length, ...porEstado },
+    porSitio, porPrioridad,
+    marcadores: { vencidos, compromisoVencido, sinMov48, sinLeer, creados7, cerrados7: cerr.length, promedioHoras },
+  }
+}
+
+/* ---------- usuarios (solo administrador) ---------- */
+export async function listarUsuarios(s) {
+  soloCoord(s)
+  const { rows } = await pool.query(
+    `SELECT nombre, rol, activo, huella <> '' AS tiene_pin, (intentos >= $1 AND bloqueado_hasta > now()) AS bloqueado
+     FROM operadores ORDER BY id`, [CFG.MAX_INTENTOS])
+  return rows.map((r) => ({ nombre: r.nombre, rol: r.rol, activo: r.activo, tienePin: r.tiene_pin, bloqueado: r.bloqueado }))
+}
+
+export async function crearUsuario(s, d) {
+  soloCoord(s)
+  const nombre = String(d.nombre || '').trim().slice(0, 80)
+  const rol = String(d.rol || 'Operador')
+  if (!nombre) throw new ErrorApp('Escribe el nombre.')
+  if (![CFG.ROL_COORD, 'Operador'].includes(rol)) throw new ErrorApp('Rol no válido.')
+  try {
+    await pool.query('INSERT INTO operadores(nombre, rol) VALUES ($1,$2)', [nombre, rol])
+  } catch (e) {
+    if (e.code === '23505') throw new ErrorApp('Ya existe un operador con ese nombre.')
+    throw e
+  }
+  await log({ operador: s.nombre, accion: 'USUARIO', detalle: `Creó a «${nombre}» (${rol})` })
+  return listarUsuarios(s)
+}
+
+export async function actualizarUsuario(s, nombre, d) {
+  soloCoord(s)
+  nombre = String(nombre || '')
+  const { rows: [op] } = await pool.query('SELECT * FROM operadores WHERE nombre=$1', [nombre])
+  if (!op) throw new ErrorApp('Operador no encontrado.', 404)
+  const rol = d.rol === undefined ? op.rol : String(d.rol)
+  const activo = d.activo === undefined ? op.activo : !!d.activo
+  if (![CFG.ROL_COORD, 'Operador'].includes(rol)) throw new ErrorApp('Rol no válido.')
+  // No dejar la operación sin ningún coordinador activo.
+  if (op.rol === CFG.ROL_COORD && (rol !== CFG.ROL_COORD || !activo)) {
+    const { rows: [{ n }] } = await pool.query("SELECT COUNT(*)::int n FROM operadores WHERE rol='Coordinador' AND activo AND nombre<>$1", [nombre])
+    if (n === 0) throw new ErrorApp('Debe quedar al menos un coordinador activo.')
+  }
+  await pool.query('UPDATE operadores SET rol=$1, activo=$2 WHERE id=$3', [rol, activo, op.id])
+  if (!activo) await pool.query('DELETE FROM sesiones WHERE nombre=$1', [nombre]) // baja: cierra sus sesiones
+  const cambios = []
+  if (rol !== op.rol) cambios.push(`rol → ${rol}`)
+  if (activo !== op.activo) cambios.push(activo ? 'alta' : 'baja')
+  await log({ operador: s.nombre, accion: 'USUARIO', detalle: `${nombre}: ${cambios.join(', ') || 'sin cambios'}` })
+  return listarUsuarios(s)
+}
+
+export async function asignarPinUsuario(s, nombre, pin) {
+  soloCoord(s)
+  nombre = String(nombre || ''); pin = String(pin || '').trim()
+  const { rows: [op] } = await pool.query('SELECT * FROM operadores WHERE nombre=$1', [nombre])
+  if (!op) throw new ErrorApp('Operador no encontrado.', 404)
+  if (!pinValido(pin)) throw new ErrorApp('PIN rechazado: 4 a 6 números, sin repetir un solo dígito ni secuencias como 1234.')
+  const sal = crypto.randomBytes(16).toString('hex')
+  await pool.query('UPDATE operadores SET sal=$1, huella=$2, intentos=0, bloqueado_hasta=NULL WHERE id=$3', [sal, huella(sal, op.nombre, pin), op.id])
+  await pool.query('DELETE FROM sesiones WHERE nombre=$1', [nombre])
+  await log({ operador: s.nombre, accion: 'USUARIO', detalle: `PIN asignado o cambiado para: ${nombre}` }) // el PIN nunca se registra
+  return listarUsuarios(s)
+}
+
+export async function desbloquearUsuario(s, nombre) {
+  soloCoord(s)
+  nombre = String(nombre || '')
+  const r = await pool.query('UPDATE operadores SET intentos=0, bloqueado_hasta=NULL WHERE nombre=$1', [nombre])
+  if (!r.rowCount) throw new ErrorApp('Operador no encontrado.', 404)
+  await log({ operador: s.nombre, accion: 'USUARIO', detalle: `Desbloqueó a: ${nombre}` })
+  return listarUsuarios(s)
 }
 
 /* ---------- exportación (coordinador) ---------- */
@@ -258,7 +414,7 @@ export async function exportarHistorial(s, formato, desde, hasta) {
     const q = (v) => { v = String(v ?? ''); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"' }
     const lineas = [['Fecha y hora', 'Operador', 'Acción', 'ID', 'Detalle', 'Valor anterior', 'Valor nuevo'].map(q).join(',')]
       .concat(filas.map((f) => [fmtTZ(f.fecha), f.operador, f.accion, f.tarjeta_id, f.detalle, f.anterior, f.nuevo].map(q).join(',')))
-    res = archivo(base + '.csv', 'text/csv', Buffer.from('﻿' + lineas.join('\r\n'), 'utf8')) // BOM: Excel lee bien los acentos
+    res = archivo(base + '.csv', 'text/csv', Buffer.from('﻿' + lineas.join('\r\n'), 'utf8'))
   } else if (formato === 'pdf') {
     if (filas.length > 3000) throw new ErrorApp(`Son ${filas.length} registros; para el PDF reduce el rango (máx. 3000) o usa CSV.`)
     const buf = await pdfBuffer((doc) => {

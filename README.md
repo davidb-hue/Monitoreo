@@ -49,6 +49,17 @@ Solo ver el diseño con datos de ejemplo (sin base de datos): `npm run demo` (PI
 - **Concurrencia:** transacciones con bloqueo de fila; si otro operador cambió la tarjeta, se avisa en vez de pisar el cambio; el doble clic no duplica tarjetas.
 - Exportación del historial (CSV/PDF por rango de fechas) y resumen PDF para el reporte del viernes, solo coordinador.
 
+## Funciones por rol (Coordinador = administrador)
+- **Tablero:** todos. Cada tarjeta muestra cuánto lleva abierta; al cerrarla, cuánto tiempo estuvo abierta.
+- **Tiempo máximo de gestión (SLA):** al crear o desde el detalle se fija un límite por **horas** o por **fecha y hora**. Si se pasa y sigue abierta, el marcador se pone en rojo. Cambiarlo queda en el historial.
+- **Dashboard:** todos. Marcadores de pendientes, vencidos, sin movimiento +48 h, avisos sin leer, creados/cerrados en 7 días, tiempo promedio abierto y pendientes por sitio/prioridad.
+- **Historial** (solo admin): todos los movimientos con filtros por operador, acción, ID, texto y fechas.
+- **Usuarios** (solo admin): crear operadores, cambiar rol, dar de baja/reactivar, asignar o reiniciar PIN y desbloquear, desde la web.
+- **Operador:** crea y gestiona registros, pero no ve el historial de cambios ni puede anular registros.
+
+La base guarda dos columnas nuevas (`vence`, `cerrado_en`). Si ya tenías la base creada, el servidor espera que existan; se agregan con:
+`ALTER TABLE tarjetas ADD COLUMN IF NOT EXISTS vence timestamptz; ALTER TABLE tarjetas ADD COLUMN IF NOT EXISTS cerrado_en timestamptz;`
+
 ## Despliegue en Vercel (un solo proyecto)
 La raíz ya trae `vercel.json` y la función `api/index.js`: Vercel compila la web Vue y la sirve junto con la API Express en la misma URL (`/api/*` → función; el resto → la web).
 

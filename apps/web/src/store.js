@@ -15,27 +15,33 @@ export const S = reactive({
   cargando: false,
   operadoresLogin: [],
   loginMsg: '',
-  modal: null, // null | 'nuevo' | 'detalle' | 'mover' | 'export'
+  vista: 'tablero', // tablero | dashboard | historial | usuarios
+  modal: null, // null | 'nuevo' | 'detalle' | 'mover' | 'export' | 'vencimiento'
   sel: null,
-  mover: null, // { id, acc, titulo }
+  mover: null,
   filtros: { q: '', tipo: '', sitio: '', resp: '' },
+  ahora: Date.now(),
+  dash: null,
+  hist: null,
+  usuarios: null,
 })
 
 export const esCoord = computed(() => S.usuario?.rol === 'Coordinador')
 export const catalogos = computed(() => S.datos?.catalogos)
 export const buscar = (id) => S.datos?.tarjetas.find((t) => t.id === id)
-/** Instrucciones: solo el coordinador las mueve/cierra/anula. */
 export const bloqueada = (t) => !!catalogos.value?.tiposSoloCoord.includes(t.tipo) && !esCoord.value
+
+export const tocar = () => { S.ahora = Date.now() } // refresca los contadores de tiempo
 
 export async function cargarOperadores() {
   try { S.operadoresLogin = await api.listarOperadores() } catch (e) { S.loginMsg = msgErr(e) }
 }
 
-/** Limpia todo lo que vio el operador anterior (relevo de turno o sesión vencida). */
 export function reiniciar(msg = '') {
   S.token = null; guardarToken(null)
   S.datos = null; S.usuario = null; S.modal = null; S.sel = null; S.mover = null
-  S.ocupado = false; S.cargando = false
+  S.ocupado = false; S.cargando = false; S.vista = 'tablero'
+  S.dash = null; S.hist = null; S.usuarios = null
   Object.assign(S.filtros, { q: '', tipo: '', sitio: '', resp: '' })
   S.loginMsg = msg
   cargarOperadores()
@@ -56,7 +62,7 @@ function aplicar(d) {
 }
 
 export async function entrar(nombre, pin) {
-  const r = await api.iniciarSesion(nombre, pin) // si falla, el error llega al formulario de login
+  const r = await api.iniciarSesion(nombre, pin)
   S.token = r.token; guardarToken(r.token); S.loginMsg = ''
   await cargar()
 }
@@ -70,12 +76,44 @@ export async function salir() {
 export async function cargar(silencioso = false) {
   if (!S.token) return
   if (!silencioso) S.cargando = true
-  try { aplicar(await api.obtenerTablero(S.token)) }
+  try {
+    aplicar(await api.obtenerTablero(S.token))
+    if (S.vista === 'dashboard') await cargarDashboard(true)
+  } catch (e) { if (!sesionVencida(e) && !silencioso) alert(msgErr(e)) }
+  finally { S.cargando = false }
+}
+
+/* ---------- navegación ---------- */
+export async function irA(vista) {
+  if ((vista === 'historial' || vista === 'usuarios') && !esCoord.value) return
+  S.vista = vista
+  if (vista === 'dashboard') return cargarDashboard()
+  if (vista === 'historial') return cargarHistorial()
+  if (vista === 'usuarios') return cargarUsuarios()
+}
+
+export async function cargarDashboard(silencioso = false) {
+  if (!silencioso) S.cargando = true
+  try { S.dash = await api.obtenerDashboard(S.token) }
   catch (e) { if (!sesionVencida(e) && !silencioso) alert(msgErr(e)) }
   finally { S.cargando = false }
 }
 
-/** Devuelve {ok, error}. El estado visto viaja al servidor para detectar cambios de otro operador. */
+export async function cargarHistorial(filtros = {}) {
+  S.cargando = true
+  try { S.hist = await api.historialGlobal(S.token, filtros) }
+  catch (e) { if (!sesionVencida(e)) { S.hist = { filas: [], error: msgErr(e) } } }
+  finally { S.cargando = false }
+}
+
+export async function cargarUsuarios() {
+  S.cargando = true
+  try { S.usuarios = await api.listarUsuarios(S.token) }
+  catch (e) { if (!sesionVencida(e)) alert(msgErr(e)) }
+  finally { S.cargando = false }
+}
+
+/* ---------- acciones sobre tarjetas ---------- */
 export async function accion(id, acc, comentario = '') {
   if (S.ocupado) return { ok: false }
   S.ocupado = true
@@ -84,7 +122,7 @@ export async function accion(id, acc, comentario = '') {
     return { ok: true }
   } catch (e) {
     if (sesionVencida(e)) return { ok: false }
-    cargar(true) // puede que otro operador ya cambió la tarjeta
+    cargar(true)
     return { ok: false, error: msgErr(e) }
   } finally { S.ocupado = false }
 }
@@ -96,3 +134,24 @@ export async function crear(datos) {
   catch (e) { return sesionVencida(e) ? { ok: false } : { ok: false, error: msgErr(e) } }
   finally { S.ocupado = false }
 }
+
+export async function fijarVencimiento(id, d) {
+  if (S.ocupado) return { ok: false }
+  S.ocupado = true
+  try { aplicar(await api.fijarVencimiento(S.token, id, d)); return { ok: true } }
+  catch (e) { return sesionVencida(e) ? { ok: false } : { ok: false, error: msgErr(e) } }
+  finally { S.ocupado = false }
+}
+
+/* ---------- usuarios (admin) ---------- */
+async function opUsuario(fn) {
+  if (S.ocupado) return { ok: false }
+  S.ocupado = true
+  try { S.usuarios = await fn(); return { ok: true } }
+  catch (e) { return sesionVencida(e) ? { ok: false } : { ok: false, error: msgErr(e) } }
+  finally { S.ocupado = false }
+}
+export const crearUsuario = (d) => opUsuario(() => api.crearUsuario(S.token, d))
+export const actualizarUsuario = (nombre, d) => opUsuario(() => api.actualizarUsuario(S.token, nombre, d))
+export const asignarPin = (nombre, pin) => opUsuario(() => api.asignarPinUsuario(S.token, nombre, pin))
+export const desbloquear = (nombre) => opUsuario(() => api.desbloquearUsuario(S.token, nombre))

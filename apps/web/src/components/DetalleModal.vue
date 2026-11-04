@@ -2,15 +2,23 @@
 import { ref, computed, onMounted } from 'vue'
 import { S, esCoord, catalogos, buscar, bloqueada, accion, sesionVencida } from '../store.js'
 import { api } from '../api/index.js'
-import { slug, fFecha, msgErr } from '../utils.js'
+import { slug, fFecha, duracion, abiertaMs, slaInfo, msgErr } from '../utils.js'
 
 const t = computed(() => buscar(S.sel))
 const com = ref('')
 const err = ref('')
-const hist = ref(null) // null = cargando
+const hist = ref(null)
 const histErr = ref('')
 
 const esAviso = computed(() => t.value && catalogos.value.tiposAviso.includes(t.value.tipo))
+const abierta = computed(() => {
+  const ms = abiertaMs(t.value, S.ahora)
+  if (ms == null) return ''
+  return t.value.estado === 'Cerrado' ? 'Estuvo abierta ' + duracion(ms) : 'Lleva abierta ' + duracion(ms)
+})
+const sla = computed(() => slaInfo(t.value, S.ahora))
+const puedeVencimiento = computed(() => t.value && !bloqueada(t.value) && t.value.estado !== 'Cerrado' && t.value.estado !== 'Anulado')
+
 const botones = computed(() => {
   const x = t.value
   if (!x) return []
@@ -28,6 +36,7 @@ const botones = computed(() => {
 })
 
 async function cargarHist() {
+  if (!esCoord.value) return // operador no ve el historial
   hist.value = null; histErr.value = ''
   try { hist.value = await api.obtenerHistorial(S.token, S.sel) }
   catch (e) { if (!sesionVencida(e)) histErr.value = msgErr(e) }
@@ -40,11 +49,8 @@ async function ejecutar(a) {
   if (a === 'Anular' && !confirm(`¿Anular ${t.value.id}? Queda registrado y deja de verse en la pizarra.`)) return
   err.value = ''
   const r = await accion(t.value.id, a, c)
-  if (r.ok) {
-    com.value = ''
-    if (a === 'Anular') S.modal = null
-    else cargarHist()
-  } else if (r.error) err.value = r.error
+  if (r.ok) { com.value = ''; if (a === 'Anular') S.modal = null; else cargarHist() }
+  else if (r.error) err.value = r.error
 }
 
 onMounted(cargarHist)
@@ -66,6 +72,13 @@ onMounted(cargarHist)
         <template v-if="t.responsable"> · Responsable: {{ t.responsable }}</template>
         <template v-if="t.fecha"> · Compromiso: {{ fFecha(t.fecha) }}</template>
       </div>
+      <div class="tiempo" style="margin:6px 0">
+        {{ abierta }}
+        <span v-if="sla" class="sla" :class="{ rojo: sla.rojo, neutro: sla.cerrada }">{{ sla.texto }}</span>
+        <button v-if="puedeVencimiento" class="btn" style="padding:2px 8px;font-size:12px;margin-left:8px" @click="S.modal = 'vencimiento'">
+          {{ t.vence ? 'Cambiar tiempo de cierre' : 'Fijar tiempo de cierre' }}
+        </button>
+      </div>
       <div class="detalle-txt">{{ t.detalle }}</div>
       <div v-if="esAviso" class="meta">Leído por: {{ t.leido.length ? t.leido.join(', ') : 'nadie aún' }}</div>
 
@@ -78,22 +91,24 @@ onMounted(cargarHist)
         </button>
       </div>
 
-      <h2 class="sec">Historial</h2>
-      <div class="linea">
-        <div v-if="histErr" class="vacio">{{ histErr }}</div>
-        <div v-else-if="hist === null" class="vacio">Cargando…</div>
-        <div v-else-if="!hist.length" class="vacio">Sin historial.</div>
-        <template v-else>
-          <div v-for="(e, i) in hist" :key="i" class="ev">
-            <div class="q">{{ fFecha(e.fecha, true) }} · {{ e.operador }}</div>
-            <div class="a">
-              {{ e.accion }}
-              <span v-if="e.anterior || e.nuevo" class="q">({{ e.anterior || '—' }} → {{ e.nuevo || '—' }})</span>
+      <template v-if="esCoord">
+        <h2 class="sec">Historial</h2>
+        <div class="linea">
+          <div v-if="histErr" class="vacio">{{ histErr }}</div>
+          <div v-else-if="hist === null" class="vacio">Cargando…</div>
+          <div v-else-if="!hist.length" class="vacio">Sin historial.</div>
+          <template v-else>
+            <div v-for="(e, i) in hist" :key="i" class="ev">
+              <div class="q">{{ fFecha(e.fecha, true) }} · {{ e.operador }}</div>
+              <div class="a">
+                {{ e.accion }}
+                <span v-if="e.anterior || e.nuevo" class="q">({{ e.anterior || '—' }} → {{ e.nuevo || '—' }})</span>
+              </div>
+              <div v-if="e.detalle">{{ e.detalle }}</div>
             </div>
-            <div v-if="e.detalle">{{ e.detalle }}</div>
-          </div>
-        </template>
-      </div>
+          </template>
+        </div>
+      </template>
     </div>
   </div>
 </template>
