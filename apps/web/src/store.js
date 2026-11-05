@@ -15,7 +15,7 @@ export const S = reactive({
   cargando: false,
   operadoresLogin: [],
   loginMsg: '',
-  vista: 'tablero', // tablero | dashboard | historial | usuarios
+  vista: 'tablero', // tablero | dashboard | historial | usuarios | catalogo
   modal: null, // null | 'nuevo' | 'detalle' | 'mover' | 'export' | 'vencimiento'
   sel: null,
   mover: null,
@@ -24,6 +24,7 @@ export const S = reactive({
   dash: null,
   hist: null,
   usuarios: null,
+  catalogo: null,
 })
 
 export const esCoord = computed(() => S.usuario?.rol === 'Coordinador')
@@ -41,7 +42,7 @@ export function reiniciar(msg = '') {
   S.token = null; guardarToken(null)
   S.datos = null; S.usuario = null; S.modal = null; S.sel = null; S.mover = null
   S.ocupado = false; S.cargando = false; S.vista = 'tablero'
-  S.dash = null; S.hist = null; S.usuarios = null
+  S.dash = null; S.hist = null; S.usuarios = null; S.catalogo = null
   Object.assign(S.filtros, { q: '', tipo: '', sitio: '', resp: '' })
   S.loginMsg = msg
   cargarOperadores()
@@ -85,11 +86,12 @@ export async function cargar(silencioso = false) {
 
 /* ---------- navegación ---------- */
 export async function irA(vista) {
-  if ((vista === 'historial' || vista === 'usuarios') && !esCoord.value) return
+  if (['historial', 'usuarios', 'catalogo'].includes(vista) && !esCoord.value) return
   S.vista = vista
   if (vista === 'dashboard') return cargarDashboard()
   if (vista === 'historial') return cargarHistorial()
   if (vista === 'usuarios') return cargarUsuarios()
+  if (vista === 'catalogo') return cargarCatalogo()
 }
 
 export async function cargarDashboard(silencioso = false) {
@@ -109,6 +111,13 @@ export async function cargarHistorial(filtros = {}) {
 export async function cargarUsuarios() {
   S.cargando = true
   try { S.usuarios = await api.listarUsuarios(S.token) }
+  catch (e) { if (!sesionVencida(e)) alert(msgErr(e)) }
+  finally { S.cargando = false }
+}
+
+export async function cargarCatalogo() {
+  S.cargando = true
+  try { S.catalogo = await api.listarCatalogo(S.token) }
   catch (e) { if (!sesionVencida(e)) alert(msgErr(e)) }
   finally { S.cargando = false }
 }
@@ -155,3 +164,17 @@ export const crearUsuario = (d) => opUsuario(() => api.crearUsuario(S.token, d))
 export const actualizarUsuario = (nombre, d) => opUsuario(() => api.actualizarUsuario(S.token, nombre, d))
 export const asignarPin = (nombre, pin) => opUsuario(() => api.asignarPinUsuario(S.token, nombre, pin))
 export const desbloquear = (nombre) => opUsuario(() => api.desbloquearUsuario(S.token, nombre))
+
+/* ---------- catálogo (admin) ---------- */
+async function opCatalogo(fn) {
+  if (S.ocupado) return { ok: false }
+  S.ocupado = true
+  try {
+    S.catalogo = await fn()
+    cargar(true) // refresca las listas del tablero (tipos, responsables, etc.)
+    return { ok: true }
+  } catch (e) { return sesionVencida(e) ? { ok: false } : { ok: false, error: msgErr(e) } }
+  finally { S.ocupado = false }
+}
+export const crearItemCatalogo = (d) => opCatalogo(() => api.crearCatalogo(S.token, d))
+export const actualizarItemCatalogo = (id, d) => opCatalogo(() => api.actualizarCatalogo(S.token, id, d))

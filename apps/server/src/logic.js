@@ -145,19 +145,41 @@ export async function cerrarSesion(token, s) {
 const esCoord = (s) => s.rol === CFG.ROL_COORD
 const soloCoord = (s) => { if (!esCoord(s)) throw new ErrorApp('Solo el administrador (coordinador) puede hacer esto.', 403) }
 
+/* ---------- catálogo (listas administrables: tipo, prioridad, categoría, sitio, turno, responsable) ---------- */
+export const GRUPOS = ['tipo', 'prioridad', 'categoria', 'sitio', 'turno', 'responsable']
+
+// Caché corta por instancia: evita leer el catálogo en cada operación. Se invalida al editarlo.
+let _cat = null, _catTs = 0
+const invalidarCat = () => { _cat = null }
+async function cat() {
+  if (_cat && Date.now() - _catTs < 10000) return _cat
+  const { rows } = await pool.query('SELECT grupo, valor, aviso, solo_coord FROM catalogo WHERE activo ORDER BY orden, id')
+  const g = (name) => rows.filter((r) => r.grupo === name).map((r) => r.valor)
+  _cat = {
+    tipos: g('tipo'), prioridades: g('prioridad'), categorias: g('categoria'),
+    sitios: g('sitio'), turnos: g('turno'), responsables: g('responsable'),
+    tiposAviso: rows.filter((r) => r.grupo === 'tipo' && r.aviso).map((r) => r.valor),
+    tiposSoloCoord: rows.filter((r) => r.grupo === 'tipo' && r.solo_coord).map((r) => r.valor),
+  }
+  _catTs = Date.now()
+  return _cat
+}
+
 /* ---------- tablero ---------- */
 export async function tablero(s) {
   const limite = new Date(Date.now() - CFG.DIAS_CERRADOS_VISIBLES * 86400000)
-  const { rows } = await pool.query(
-    `SELECT ${COLS} FROM tarjetas WHERE estado IN ('Abierto','En seguimiento') OR (estado='Cerrado' AND ult_act >= $1)`, [limite])
+  const [{ rows }, c] = await Promise.all([
+    pool.query(`SELECT ${COLS} FROM tarjetas WHERE estado IN ('Abierto','En seguimiento') OR (estado='Cerrado' AND ult_act >= $1)`, [limite]),
+    cat(),
+  ])
   return {
     usuario: s,
     tarjetas: rows.map(aTarjeta),
     operadores: await listarOperadores(),
     catalogos: {
-      tipos: esCoord(s) ? CFG.TIPOS : CFG.TIPOS.filter((t) => !CFG.TIPOS_SOLO_COORD.includes(t)),
-      tiposAviso: CFG.TIPOS_AVISO, tiposSoloCoord: CFG.TIPOS_SOLO_COORD,
-      categorias: CFG.CATEGORIAS, sitios: CFG.SITIOS, turnos: CFG.TURNOS, prioridades: CFG.PRIORIDADES,
+      tipos: esCoord(s) ? c.tipos : c.tipos.filter((t) => !c.tiposSoloCoord.includes(t)),
+      tiposAviso: c.tiposAviso, tiposSoloCoord: c.tiposSoloCoord,
+      categorias: c.categorias, sitios: c.sitios, turnos: c.turnos, prioridades: c.prioridades, responsables: c.responsables,
     },
     ahora: new Date().toISOString(),
   }
@@ -172,13 +194,14 @@ export async function crearTarjeta(s, d) {
   }
   if (!v.titulo) throw new ErrorApp('Falta completar: título.')
   if (!v.detalle) throw new ErrorApp('Falta completar: detalle.')
-  if (!CFG.TIPOS.includes(v.tipo)) throw new ErrorApp('Tipo no válido.')
-  if (!CFG.CATEGORIAS.includes(v.categoria)) throw new ErrorApp('Categoría no válida.')
-  if (!CFG.SITIOS.includes(v.sitio)) throw new ErrorApp('Sitio no válido.')
-  if (!CFG.TURNOS.includes(v.turno)) throw new ErrorApp('Turno no válido.')
-  if (!CFG.PRIORIDADES.includes(v.prioridad)) throw new ErrorApp('Prioridad no válida.')
-  if (CFG.TIPOS_SOLO_COORD.includes(v.tipo) && !esCoord(s)) throw new ErrorApp('Solo el coordinador puede publicar instrucciones nuevas.', 403)
-  if (v.responsable && !(await listarOperadores()).includes(v.responsable)) throw new ErrorApp('Responsable no válido.')
+  const c = await cat()
+  if (!c.tipos.includes(v.tipo)) throw new ErrorApp('Tipo no válido.')
+  if (!c.categorias.includes(v.categoria)) throw new ErrorApp('Categoría no válida.')
+  if (!c.sitios.includes(v.sitio)) throw new ErrorApp('Sitio no válido.')
+  if (!c.turnos.includes(v.turno)) throw new ErrorApp('Turno no válido.')
+  if (!c.prioridades.includes(v.prioridad)) throw new ErrorApp('Prioridad no válida.')
+  if (c.tiposSoloCoord.includes(v.tipo) && !esCoord(s)) throw new ErrorApp('Solo el coordinador puede publicar instrucciones nuevas.', 403)
+  if (v.responsable && !c.responsables.includes(v.responsable)) throw new ErrorApp('Responsable no válido.')
   if (v.fecha && !textoAFecha(v.fecha)) throw new ErrorApp('Fecha compromiso no válida.')
   const ahora = new Date()
   const inicia = calcMomento(ahora, d.iniciaHoras, d.inicia, 'inicio') // «a partir de»
@@ -207,6 +230,7 @@ export async function actualizarTarjeta(s, id, accion, comentario, estadoVisto) 
   if (accion !== 'Confirmar lectura' && !comentario) throw new ErrorApp('Escribe un comentario: queda en el historial.')
   if (accion === 'Anular' && !esCoord(s)) throw new ErrorApp('Solo el coordinador puede anular.', 403)
   id = String(id || ''); estadoVisto = String(estadoVisto || '')
+  const cfg = await cat()
 
   await tx(async (c) => {
     const { rows: [t] } = await c.query('SELECT id, tipo, estado, leido FROM tarjetas WHERE id=$1 FOR UPDATE', [id])
@@ -215,7 +239,7 @@ export async function actualizarTarjeta(s, id, accion, comentario, estadoVisto) 
     if (ant === 'Anulado') throw new ErrorApp('Esta tarjeta está anulada.')
 
     if (accion === 'Confirmar lectura') {
-      if (!CFG.TIPOS_AVISO.includes(t.tipo)) throw new ErrorApp('Esta tarjeta no requiere confirmar lectura.')
+      if (!cfg.tiposAviso.includes(t.tipo)) throw new ErrorApp('Esta tarjeta no requiere confirmar lectura.')
       if (t.leido.includes(s.nombre)) return
       await c.query('UPDATE tarjetas SET leido = array_append(leido, $1) WHERE id=$2', [s.nombre, id])
       await log({ operador: s.nombre, accion: 'LECTURA', id, detalle: 'Confirmó lectura' }, c)
@@ -225,7 +249,7 @@ export async function actualizarTarjeta(s, id, accion, comentario, estadoVisto) 
     if (estadoVisto && estadoVisto !== ant) {
       throw new ErrorApp(`Otro operador cambió esta tarjeta mientras la veías (ahora está en «${ant}»). Se actualizó el tablero; revisa y repite si hace falta.`, 409)
     }
-    if (CFG.TIPOS_SOLO_COORD.includes(t.tipo) && !esCoord(s) && accion !== 'Avance') {
+    if (cfg.tiposSoloCoord.includes(t.tipo) && !esCoord(s) && accion !== 'Avance') {
       throw new ErrorApp('Las instrucciones solo las mueve, cierra o anula el coordinador. Puedes registrar un avance o confirmar lectura.', 403)
     }
     let nuevo = ant, codigo
@@ -261,11 +285,12 @@ export async function fijarVencimiento(s, id, d, comentario) {
   id = String(id || '')
   comentario = String(comentario || '').trim().slice(0, 3000)
   if (!comentario) throw new ErrorApp('Escribe un comentario: queda en el historial.')
+  const cfg = await cat()
   await tx(async (c) => {
     const { rows: [t] } = await c.query('SELECT id, estado, tipo, vence FROM tarjetas WHERE id=$1 FOR UPDATE', [id])
     if (!t) throw new ErrorApp(`No se encontró la tarjeta ${id}.`, 404)
     if (t.estado === 'Anulado') throw new ErrorApp('Esta tarjeta está anulada.')
-    if (CFG.TIPOS_SOLO_COORD.includes(t.tipo) && !esCoord(s)) throw new ErrorApp('Solo el coordinador gestiona las instrucciones.', 403)
+    if (cfg.tiposSoloCoord.includes(t.tipo) && !esCoord(s)) throw new ErrorApp('Solo el coordinador gestiona las instrucciones.', 403)
     const quitar = d.quitar === true || d.quitar === 'true'
     const vence = quitar ? null : calcMomento(new Date(), d.venceHoras, d.vence, 'cierre')
     if (!quitar && !vence) throw new ErrorApp('Indica las horas o la fecha y hora de cierre.')
@@ -304,11 +329,13 @@ export async function dashboard(s) {
   const hoy = hoyTZ()
   const semana = new Date(Date.now() - 7 * 86400000)
   const nOper = (await listarOperadores()).length
+  const c = await cat()
   const { rows: todas } = await pool.query(`SELECT ${COLS} FROM tarjetas`)
   const activas = todas.filter((t) => t.estado !== 'Anulado')
   const pend = todas.filter((t) => t.estado === 'Abierto' || t.estado === 'En seguimiento')
   const porEstado = { Abierto: 0, 'En seguimiento': 0, Cerrado: 0, Anulado: 0 }
-  const porSitio = {}, porPrioridad = { Alta: 0, Media: 0, Baja: 0 }
+  const porSitio = {}, porPrioridad = {}
+  c.prioridades.forEach((p) => { porPrioridad[p] = 0 }) // respeta el orden del catálogo
   activas.forEach((t) => { porSitio[t.sitio] = (porSitio[t.sitio] || 0) + 1 })
   todas.forEach((t) => { porEstado[t.estado] = (porEstado[t.estado] || 0) + 1 })
   pend.forEach((t) => { porPrioridad[t.prioridad] = (porPrioridad[t.prioridad] || 0) + 1 })
@@ -316,7 +343,7 @@ export async function dashboard(s) {
   const vencidos = pend.filter((t) => t.vence && new Date(t.vence).getTime() < ahora).length
   const compromisoVencido = pend.filter((t) => t.fecha && t.fecha < hoy).length
   const sinMov48 = pend.filter((t) => ahora - new Date(t.ult_act).getTime() > 48 * 3600000).length
-  const sinLeer = pend.filter((t) => CFG.TIPOS_AVISO.includes(t.tipo) && t.leido.length < nOper).length
+  const sinLeer = pend.filter((t) => c.tiposAviso.includes(t.tipo) && t.leido.length < nOper).length
   const creados7 = activas.filter((t) => t.creacion >= semana).length
   const cerr = todas.filter((t) => t.estado === 'Cerrado' && t.cerrado_en && t.cerrado_en >= semana)
   const horas = cerr.map((t) => (new Date(t.cerrado_en).getTime() - new Date(t.creacion).getTime()) / 3600000)
@@ -398,6 +425,67 @@ export async function desbloquearUsuario(s, nombre) {
   return listarUsuarios(s)
 }
 
+/* ---------- catálogo (solo administrador) ---------- */
+export async function listarCatalogo(s) {
+  soloCoord(s)
+  const { rows } = await pool.query('SELECT id, grupo, valor, orden, activo, aviso, solo_coord FROM catalogo ORDER BY grupo, orden, id')
+  const items = rows.map((r) => ({ id: r.id, grupo: r.grupo, valor: r.valor, orden: r.orden, activo: r.activo, aviso: r.aviso, soloCoord: r.solo_coord }))
+  return { grupos: GRUPOS, items }
+}
+
+export async function crearCatalogo(s, d) {
+  soloCoord(s)
+  const grupo = String(d.grupo || '')
+  const valor = String(d.valor || '').trim().slice(0, 80)
+  if (!GRUPOS.includes(grupo)) throw new ErrorApp('Grupo no válido.')
+  if (!valor) throw new ErrorApp('Escribe el valor.')
+  const aviso = grupo === 'tipo' && !!d.aviso
+  const solo = grupo === 'tipo' && !!d.soloCoord
+  const { rows: [{ max }] } = await pool.query('SELECT COALESCE(MAX(orden),0) max FROM catalogo WHERE grupo=$1', [grupo])
+  try {
+    await pool.query('INSERT INTO catalogo(grupo, valor, orden, aviso, solo_coord) VALUES ($1,$2,$3,$4,$5)', [grupo, valor, max + 1, aviso, solo])
+  } catch (e) {
+    if (e.code === '23505') throw new ErrorApp('Ya existe ese valor en esta lista.')
+    throw e
+  }
+  invalidarCat()
+  await log({ operador: s.nombre, accion: 'CATÁLOGO', detalle: `Agregó ${grupo}: «${valor}»`, nuevo: valor })
+  return listarCatalogo(s)
+}
+
+export async function actualizarCatalogo(s, id, d) {
+  soloCoord(s)
+  id = Number(id)
+  const { rows: [it] } = await pool.query('SELECT * FROM catalogo WHERE id=$1', [id])
+  if (!it) throw new ErrorApp('Elemento del catálogo no encontrado.', 404)
+  const valor = d.valor === undefined ? it.valor : String(d.valor).trim().slice(0, 80)
+  const activo = d.activo === undefined ? it.activo : !!d.activo
+  const aviso = it.grupo === 'tipo' ? (d.aviso === undefined ? it.aviso : !!d.aviso) : false
+  const solo = it.grupo === 'tipo' ? (d.soloCoord === undefined ? it.solo_coord : !!d.soloCoord) : false
+  if (!valor) throw new ErrorApp('El valor no puede quedar vacío.')
+  // No dejar una lista sin ningún valor activo: rompería el formulario de registro.
+  if (it.activo && !activo) {
+    const { rows: [{ n }] } = await pool.query('SELECT COUNT(*)::int n FROM catalogo WHERE grupo=$1 AND activo AND id<>$2', [it.grupo, id])
+    if (n === 0) throw new ErrorApp(`Debe quedar al menos un valor activo en «${it.grupo}».`)
+  }
+  try {
+    await pool.query('UPDATE catalogo SET valor=$1, activo=$2, aviso=$3, solo_coord=$4 WHERE id=$5', [valor, activo, aviso, solo, id])
+  } catch (e) {
+    if (e.code === '23505') throw new ErrorApp('Ya existe ese valor en esta lista.')
+    throw e
+  }
+  invalidarCat()
+  const cambios = []
+  if (valor !== it.valor) cambios.push(`«${it.valor}» → «${valor}»`)
+  if (activo !== it.activo) cambios.push(activo ? 'activado' : 'desactivado')
+  if (it.grupo === 'tipo') {
+    if (aviso !== it.aviso) cambios.push(aviso ? 'requiere lectura' : 'sin lectura obligatoria')
+    if (solo !== it.solo_coord) cambios.push(solo ? 'solo coordinador' : 'disponible para todos')
+  }
+  await log({ operador: s.nombre, accion: 'CATÁLOGO', detalle: `${it.grupo} «${it.valor}»: ${cambios.join(', ') || 'sin cambios'}`, anterior: it.valor, nuevo: valor })
+  return listarCatalogo(s)
+}
+
 /* ---------- exportación (coordinador) ---------- */
 const pdfBuffer = (dibujar) => new Promise((res, rej) => {
   const doc = new PDFDocument({ size: 'A4', margin: 36 })
@@ -446,7 +534,8 @@ export async function exportarResumen(s, desde, hasta) {
   const pend = todas.filter((t) => t.estado === 'Abierto' || t.estado === 'En seguimiento')
   const venc = pend.filter((t) => t.fecha && t.fecha < hoy)
   const sinMov = pend.filter((t) => Date.now() - t.ult_act > 48 * 3600000)
-  const sinLeer = pend.filter((t) => CFG.TIPOS_AVISO.includes(t.tipo) && t.leido.length < nOper)
+  const cAviso = (await cat()).tiposAviso
+  const sinLeer = pend.filter((t) => cAviso.includes(t.tipo) && t.leido.length < nOper)
   const nCerradas = await unicos('CERRAR'), nAnuladas = await unicos('ANULAR')
   const grupos = (arr, k) => arr.reduce((o, t) => { o[t[k] || '—'] = (o[t[k] || '—'] || 0) + 1; return o }, {})
   const nombre = `Resumen_${desde}_a_${hasta}`

@@ -79,6 +79,22 @@ CREATE TABLE IF NOT EXISTS solicitudes (         -- evita tarjetas duplicadas po
   creado     timestamptz NOT NULL DEFAULT now()
 );
 
+-- ---------- Catálogo (listas administrables por el coordinador) ----------
+-- Tipo, Prioridad, Categoría, País/Sitio, Turno y Responsable. Los valores ya
+-- no están fijos en el código: el coordinador los crea y administra desde la web.
+CREATE TABLE IF NOT EXISTS catalogo (
+  id         int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  grupo      text NOT NULL CHECK (grupo IN ('tipo','prioridad','categoria','sitio','turno','responsable')),
+  valor      text NOT NULL CHECK (length(btrim(valor)) BETWEEN 1 AND 80),
+  orden      int NOT NULL DEFAULT 0,
+  activo     boolean NOT NULL DEFAULT true,
+  aviso      boolean NOT NULL DEFAULT false,   -- solo 'tipo': exige confirmar lectura a todos
+  solo_coord boolean NOT NULL DEFAULT false,   -- solo 'tipo': solo el coordinador lo publica/mueve
+  UNIQUE (grupo, valor)
+);
+-- La prioridad ahora se valida contra el catálogo (no una lista fija en la tabla).
+ALTER TABLE tarjetas DROP CONSTRAINT IF EXISTS tarjetas_prioridad_check;
+
 -- ---------- Reglas de trazabilidad (triggers) ----------
 CREATE OR REPLACE FUNCTION fn_tarjetas_id() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -130,6 +146,36 @@ INSERT INTO operadores (nombre, rol) VALUES
   ('Operador 4', 'Operador'), ('Operador 5', 'Operador')
 ON CONFLICT (nombre) DO NOTHING;
 
+-- Catálogo inicial (igual a las listas que antes estaban fijas en el código).
+INSERT INTO catalogo (grupo, valor, orden, aviso, solo_coord) VALUES
+  ('tipo','Seguimiento',1,false,false),
+  ('tipo','Aviso importante',2,true,false),
+  ('tipo','Instrucción nueva',3,true,true),
+  ('tipo','Cambio de actividad',4,true,false),
+  ('tipo','Otro',5,false,false),
+  ('prioridad','Alta',1,false,false),
+  ('prioridad','Media',2,false,false),
+  ('prioridad','Baja',3,false,false),
+  ('categoria','Revisión de video',1,false,false),
+  ('categoria','Seguimiento GPS',2,false,false),
+  ('categoria','Cámara / equipo',3,false,false),
+  ('categoria','Incidente',4,false,false),
+  ('categoria','Relevo / turno',5,false,false),
+  ('categoria','Otro',6,false,false),
+  ('sitio','El Salvador',1,false,false),
+  ('sitio','Guatemala',2,false,false),
+  ('sitio','Honduras',3,false,false),
+  ('sitio','Nicaragua',4,false,false),
+  ('sitio','Costa Rica',5,false,false),
+  ('sitio','Regional',6,false,false),
+  ('turno','Mañana (06:00–14:00)',1,false,false),
+  ('turno','Tarde (14:00–22:00)',2,false,false),
+  ('turno','Noche (22:00–06:00)',3,false,false),
+  ('turno','Administrativo',4,false,false),
+  ('responsable','Operador Rotativo',1,false,false),
+  ('responsable','Operador Administrativo',2,false,false)
+ON CONFLICT (grupo, valor) DO NOTHING;
+
 INSERT INTO historial (operador, accion, detalle)
 SELECT 'Sistema', 'INSTALACIÓN', 'Base de datos creada (Neon).'
 WHERE NOT EXISTS (SELECT 1 FROM historial WHERE accion = 'INSTALACIÓN');
@@ -147,5 +193,6 @@ COMMIT;
 -- GRANT SELECT, INSERT          ON historial    TO pizarra_app;   -- sin UPDATE/DELETE
 -- GRANT SELECT, INSERT, UPDATE  ON tarjetas     TO pizarra_app;   -- sin DELETE
 -- GRANT SELECT, INSERT, UPDATE  ON operadores   TO pizarra_app;
+-- GRANT SELECT, INSERT, UPDATE  ON catalogo     TO pizarra_app;
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON sesiones, solicitudes TO pizarra_app;
 -- GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO pizarra_app;

@@ -1,13 +1,27 @@
 // Modo demostración: datos en memoria (se pierden al recargar). PIN de prueba: 1234.
-const CATALOGOS = {
-  tiposAviso: ['Aviso importante', 'Instrucción nueva', 'Cambio de actividad'],
-  tiposSoloCoord: ['Instrucción nueva'],
-  categorias: ['Revisión de video', 'Seguimiento GPS', 'Cámara / equipo', 'Incidente', 'Relevo / turno', 'Otro'],
-  sitios: ['El Salvador', 'Guatemala', 'Honduras', 'Nicaragua', 'Costa Rica', 'Regional'],
-  turnos: ['Mañana (06:00–14:00)', 'Tarde (14:00–22:00)', 'Noche (22:00–06:00)', 'Administrativo'],
-  prioridades: ['Alta', 'Media', 'Baja'],
+const GRUPOS = ['tipo', 'prioridad', 'categoria', 'sitio', 'turno', 'responsable']
+let catSeq = 0
+const _it = (grupo, valor, orden, aviso = false, soloCoord = false) => ({ id: ++catSeq, grupo, valor, orden, activo: true, aviso, soloCoord })
+let catItems = [
+  _it('tipo', 'Seguimiento', 1), _it('tipo', 'Aviso importante', 2, true), _it('tipo', 'Instrucción nueva', 3, true, true),
+  _it('tipo', 'Cambio de actividad', 4, true), _it('tipo', 'Otro', 5),
+  _it('prioridad', 'Alta', 1), _it('prioridad', 'Media', 2), _it('prioridad', 'Baja', 3),
+  _it('categoria', 'Revisión de video', 1), _it('categoria', 'Seguimiento GPS', 2), _it('categoria', 'Cámara / equipo', 3),
+  _it('categoria', 'Incidente', 4), _it('categoria', 'Relevo / turno', 5), _it('categoria', 'Otro', 6),
+  _it('sitio', 'El Salvador', 1), _it('sitio', 'Guatemala', 2), _it('sitio', 'Honduras', 3),
+  _it('sitio', 'Nicaragua', 4), _it('sitio', 'Costa Rica', 5), _it('sitio', 'Regional', 6),
+  _it('turno', 'Mañana (06:00–14:00)', 1), _it('turno', 'Tarde (14:00–22:00)', 2), _it('turno', 'Noche (22:00–06:00)', 3), _it('turno', 'Administrativo', 4),
+  _it('responsable', 'Operador Rotativo', 1), _it('responsable', 'Operador Administrativo', 2),
+]
+function catView() {
+  const act = catItems.filter((i) => i.activo).sort((a, b) => a.orden - b.orden)
+  const g = (name) => act.filter((i) => i.grupo === name).map((i) => i.valor)
+  return {
+    tipos: g('tipo'), prioridades: g('prioridad'), categorias: g('categoria'), sitios: g('sitio'), turnos: g('turno'), responsables: g('responsable'),
+    tiposAviso: act.filter((i) => i.grupo === 'tipo' && i.aviso).map((i) => i.valor),
+    tiposSoloCoord: act.filter((i) => i.grupo === 'tipo' && i.soloCoord).map((i) => i.valor),
+  }
 }
-const TIPOS = ['Seguimiento', 'Aviso importante', 'Instrucción nueva', 'Cambio de actividad', 'Otro']
 
 let usuarios = [
   { nombre: 'Oscar', rol: 'Coordinador', activo: true, tienePin: true, bloqueado: false },
@@ -56,11 +70,12 @@ function calcMomento(baseMs, horas, fechaISO) {
 const calcVence = (d) => calcMomento(Date.now(), d.venceHoras, d.vence)
 
 function tablero() {
+  const c = catView()
   return ok({
     usuario: { nombre: ses.nombre, rol: ses.rol },
     tarjetas: t.filter((x) => x.estado !== 'Anulado'),
     operadores: nombresActivos(),
-    catalogos: { ...CATALOGOS, tipos: coord() ? TIPOS : TIPOS.filter((x) => !CATALOGOS.tiposSoloCoord.includes(x)) },
+    catalogos: { ...c, tipos: coord() ? c.tipos : c.tipos.filter((x) => !c.tiposSoloCoord.includes(x)) },
     ahora: new Date().toISOString(),
   })
 }
@@ -80,7 +95,7 @@ export const obtenerTablero = () => (ses ? tablero() : no('SESION_VENCIDA'))
 
 export const crearTarjeta = (_tk, d) => {
   if (!ses) return no('SESION_VENCIDA')
-  if (CATALOGOS.tiposSoloCoord.includes(d.tipo) && !coord()) return no('Solo el coordinador puede publicar instrucciones nuevas.')
+  if (catView().tiposSoloCoord.includes(d.tipo) && !coord()) return no('Solo el coordinador puede publicar instrucciones nuevas.')
   const ahora = new Date().toISOString()
   n++
   const id = 'SM-' + ('000' + n).slice(-4)
@@ -104,7 +119,7 @@ export const actualizarTarjeta = (_tk, id, acc, com, visto) => {
     return tablero()
   }
   if (visto && visto !== ant) return no('Otro operador cambió esta tarjeta mientras la veías (ahora está en «' + ant + '»).')
-  if (CATALOGOS.tiposSoloCoord.includes(x.tipo) && !coord() && acc !== 'Avance') return no('Las instrucciones solo las mueve, cierra o anula el coordinador.')
+  if (catView().tiposSoloCoord.includes(x.tipo) && !coord() && acc !== 'Avance') return no('Las instrucciones solo las mueve, cierra o anula el coordinador.')
   let nuevo = ant, cod
   if (acc === 'Avance') { cod = 'AVANCE'; if (ant === 'Abierto') nuevo = 'En seguimiento' }
   else if (acc === 'Cerrar') { cod = 'CERRAR'; nuevo = 'Cerrado' }
@@ -154,7 +169,9 @@ export const obtenerDashboard = (_tk) => {
   const pend = t.filter((x) => x.estado === 'Abierto' || x.estado === 'En seguimiento')
   const porEstado = { Abierto: 0, 'En seguimiento': 0, Cerrado: 0, Anulado: 0 }
   t.forEach((x) => { porEstado[x.estado] = (porEstado[x.estado] || 0) + 1 })
-  const porSitio = {}, porPrioridad = { Alta: 0, Media: 0, Baja: 0 }
+  const cv = catView()
+  const porSitio = {}, porPrioridad = {}
+  cv.prioridades.forEach((p) => { porPrioridad[p] = 0 })
   activas.forEach((x) => { porSitio[x.sitio] = (porSitio[x.sitio] || 0) + 1 })
   pend.forEach((x) => { porPrioridad[x.prioridad] = (porPrioridad[x.prioridad] || 0) + 1 })
   const hoy = new Date().toLocaleDateString('en-CA')
@@ -168,7 +185,7 @@ export const obtenerDashboard = (_tk) => {
       vencidos: pend.filter((x) => x.vence && new Date(x.vence).getTime() < ahora).length,
       compromisoVencido: pend.filter((x) => x.fecha && x.fecha < hoy).length,
       sinMov48: pend.filter((x) => ahora - new Date(x.ultAct).getTime() > 48 * 3600000).length,
-      sinLeer: pend.filter((x) => CATALOGOS.tiposAviso.includes(x.tipo) && x.leido.length < nombresActivos().length).length,
+      sinLeer: pend.filter((x) => cv.tiposAviso.includes(x.tipo) && x.leido.length < nombresActivos().length).length,
       creados7: activas.filter((x) => new Date(x.creacion).getTime() >= semana).length,
       cerrados7: cerr.length,
       promedioHoras: horas.length ? Math.round((horas.reduce((a, b) => a + b, 0) / horas.length) * 10) / 10 : 0,
@@ -223,3 +240,31 @@ export const exportarHistorial = (_tk, formato, desde, hasta) => {
   return ok({ nombre: `Historial_${desde}_a_${hasta}.csv`, mime: 'text/csv', base64: btoa(unescape(encodeURIComponent(csv))) })
 }
 export const exportarResumen = () => no('El resumen PDF solo funciona con el servidor. En la demostración no está disponible.')
+
+const listaCatalogo = () => ({ grupos: GRUPOS, items: catItems.slice().sort((a, b) => a.grupo.localeCompare(b.grupo) || a.orden - b.orden) })
+export const listarCatalogo = () => coord() ? ok(listaCatalogo()) : no('Solo el administrador.')
+export const crearCatalogo = (_tk, d) => {
+  if (!coord()) return no('Solo el administrador.')
+  const grupo = String(d.grupo || ''); const valor = String(d.valor || '').trim()
+  if (!GRUPOS.includes(grupo)) return no('Grupo no válido.')
+  if (!valor) return no('Escribe el valor.')
+  if (catItems.some((i) => i.grupo === grupo && i.valor.toLowerCase() === valor.toLowerCase())) return no('Ya existe ese valor en esta lista.')
+  const orden = Math.max(0, ...catItems.filter((i) => i.grupo === grupo).map((i) => i.orden)) + 1
+  catItems.push(_it(grupo, valor, orden, grupo === 'tipo' && !!d.aviso, grupo === 'tipo' && !!d.soloCoord))
+  registrar({ accion: 'CATÁLOGO', detalle: `Agregó ${grupo}: «${valor}»` })
+  return ok(listaCatalogo())
+}
+export const actualizarCatalogo = (_tk, id, d) => {
+  if (!coord()) return no('Solo el administrador.')
+  const it = catItems.find((i) => i.id === Number(id))
+  if (!it) return no('Elemento del catálogo no encontrado.')
+  const valor = d.valor === undefined ? it.valor : String(d.valor).trim()
+  const activo = d.activo === undefined ? it.activo : !!d.activo
+  if (!valor) return no('El valor no puede quedar vacío.')
+  if (catItems.some((i) => i !== it && i.grupo === it.grupo && i.valor.toLowerCase() === valor.toLowerCase())) return no('Ya existe ese valor en esta lista.')
+  if (it.activo && !activo && !catItems.some((i) => i !== it && i.grupo === it.grupo && i.activo)) return no(`Debe quedar al menos un valor activo en «${it.grupo}».`)
+  it.valor = valor; it.activo = activo
+  if (it.grupo === 'tipo') { if (d.aviso !== undefined) it.aviso = !!d.aviso; if (d.soloCoord !== undefined) it.soloCoord = !!d.soloCoord }
+  registrar({ accion: 'CATÁLOGO', detalle: `${it.grupo} «${it.valor}»: actualizado` })
+  return ok(listaCatalogo())
+}

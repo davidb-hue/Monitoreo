@@ -57,7 +57,7 @@ async function guardar() {
           <label>Responsable</label>
           <select v-model="f.responsable">
             <option value="">(sin asignar)</option>
-            <option v-for="x in S.datos.operadores" :key="x">{{ x }}</option>
+            <option v-for="x in c.responsables" :key="x">{{ x }}</option>
           </select>
         </div>
       </div>

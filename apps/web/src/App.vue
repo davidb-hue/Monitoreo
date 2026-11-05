@@ -14,9 +14,14 @@ import VencimientoModal from './components/VencimientoModal.vue'
 import DashboardView from './components/DashboardView.vue'
 import HistorialView from './components/HistorialView.vue'
 import UsuariosView from './components/UsuariosView.vue'
+import CatalogoView from './components/CatalogoView.vue'
 
 const COLS = ['Abierto', 'En seguimiento', 'Cerrado']
-const PRIO = { Alta: 0, Media: 1, Baja: 2 }
+// El orden de prioridad sale del catálogo (primero = más urgente).
+const PRIO = computed(() => {
+  const m = {}; (catalogos.value?.prioridades || ['Alta', 'Media', 'Baja']).forEach((p, i) => { m[p] = i }); return m
+})
+const prio = (t) => PRIO.value[t.prioridad] ?? 99
 
 const reloj = ref('')
 function tic() {
@@ -39,7 +44,7 @@ const columnas = computed(() => COLS.map((nombre) => {
   const esAviso = (t) => catalogos.value.tiposAviso.includes(t.tipo)
   let ts = filtradas.value.filter((t) => t.estado === nombre && !esAviso(t))
   if (nombre === 'Cerrado') ts = ts.concat(filtradas.value.filter((t) => t.estado === 'Cerrado' && esAviso(t)))
-  ts.sort((a, b) => nombre === 'Cerrado' ? b.ultAct.localeCompare(a.ultAct) : (PRIO[a.prioridad] - PRIO[b.prioridad]) || b.ultAct.localeCompare(a.ultAct))
+  ts.sort((a, b) => nombre === 'Cerrado' ? b.ultAct.localeCompare(a.ultAct) : (prio(a) - prio(b)) || b.ultAct.localeCompare(a.ultAct))
   return { nombre, titulo: nombre === 'Cerrado' ? 'Cerrado (últimos 7 días)' : nombre, ts }
 }))
 
@@ -76,6 +81,7 @@ onBeforeUnmount(() => { clearInterval(t1); clearInterval(t2) })
       <button :class="{ activo: S.vista === 'dashboard' }" @click="irA('dashboard')">Dashboard</button>
       <button v-if="esCoord" :class="{ activo: S.vista === 'historial' }" @click="irA('historial')">Historial</button>
       <button v-if="esCoord" :class="{ activo: S.vista === 'usuarios' }" @click="irA('usuarios')">Usuarios</button>
+      <button v-if="esCoord" :class="{ activo: S.vista === 'catalogo' }" @click="irA('catalogo')">Catálogo</button>
     </nav>
     <span class="esp"></span>
     <template v-if="S.usuario">
@@ -93,7 +99,7 @@ onBeforeUnmount(() => { clearInterval(t1); clearInterval(t2) })
         <input v-model="S.filtros.q" placeholder="Buscar por ID, título o detalle">
         <select v-model="S.filtros.tipo"><option value="">Todos los tipos</option><option v-for="x in tiposFiltro" :key="x">{{ x }}</option></select>
         <select v-model="S.filtros.sitio"><option value="">Todos los sitios</option><option v-for="x in catalogos.sitios" :key="x">{{ x }}</option></select>
-        <select v-model="S.filtros.resp"><option value="">Todos los responsables</option><option v-for="x in S.datos.operadores" :key="x">{{ x }}</option></select>
+        <select v-model="S.filtros.resp"><option value="">Todos los responsables</option><option v-for="x in catalogos.responsables" :key="x">{{ x }}</option></select>
       </div>
       <h2 class="sec">Avisos e instrucciones vigentes</h2>
       <div class="avisos">
@@ -116,6 +122,7 @@ onBeforeUnmount(() => { clearInterval(t1); clearInterval(t2) })
     <main v-if="S.vista === 'dashboard'" class="main-dash"><DashboardView /></main>
     <main v-if="S.vista === 'historial' && esCoord"><HistorialView /></main>
     <main v-if="S.vista === 'usuarios' && esCoord"><UsuariosView /></main>
+    <main v-if="S.vista === 'catalogo' && esCoord"><CatalogoView /></main>
 
     <DetalleModal v-if="S.modal === 'detalle'" />
     <NuevoModal v-if="S.modal === 'nuevo'" />

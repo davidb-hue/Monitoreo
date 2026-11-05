@@ -33,5 +33,8 @@ export const crearUsuario = (token, d) => req('POST', '/usuarios', token, d)
 export const actualizarUsuario = (token, nombre, d) => req('POST', `/usuarios/${encodeURIComponent(nombre)}/editar`, token, d)
 export const asignarPinUsuario = (token, nombre, pin) => req('POST', `/usuarios/${encodeURIComponent(nombre)}/pin`, token, { pin })
 export const desbloquearUsuario = (token, nombre) => req('POST', `/usuarios/${encodeURIComponent(nombre)}/desbloquear`, token, {})
+export const listarCatalogo = (token) => req('GET', '/catalogo', token)
+export const crearCatalogo = (token, d) => req('POST', '/catalogo', token, d)
+export const actualizarCatalogo = (token, id, d) => req('POST', `/catalogo/${encodeURIComponent(id)}`, token, d)
 
 function limpiar(o) { const r = {}; Object.keys(o || {}).forEach((k) => { if (o[k] !== '' && o[k] != null) r[k] = o[k] }); return r }
