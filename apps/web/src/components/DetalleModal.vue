@@ -91,24 +91,22 @@ onMounted(cargarHist)
         </button>
       </div>
 
-      <template>
-        <h2 class="sec">Historial del seguimiento</h2>
-        <div class="linea">
-          <div v-if="histErr" class="vacio">{{ histErr }}</div>
-          <div v-else-if="hist === null" class="vacio">Cargando…</div>
-          <div v-else-if="!hist.length" class="vacio">Sin historial.</div>
-          <template v-else>
-            <div v-for="(e, i) in hist" :key="i" class="ev">
-              <div class="q">{{ fFecha(e.fecha, true) }} · {{ e.operador }}</div>
-              <div class="a">
-                {{ e.accion }}
-                <span v-if="e.anterior || e.nuevo" class="q">({{ e.anterior || '—' }} → {{ e.nuevo || '—' }})</span>
-              </div>
-              <div v-if="e.detalle">{{ e.detalle }}</div>
+      <h2 class="sec">Historial del seguimiento</h2>
+      <div class="linea">
+        <div v-if="histErr" class="vacio">{{ histErr }}</div>
+        <div v-else-if="hist === null" class="vacio">Cargando…</div>
+        <div v-else-if="!hist.length" class="vacio">Sin historial.</div>
+        <template v-else>
+          <div v-for="(e, i) in hist" :key="i" class="ev">
+            <div class="q">{{ fFecha(e.fecha, true) }} · {{ e.operador }}</div>
+            <div class="a">
+              {{ e.accion }}
+              <span v-if="e.anterior || e.nuevo" class="q">({{ e.anterior || '—' }} → {{ e.nuevo || '—' }})</span>
             </div>
-          </template>
-        </div>
-      </template>
+            <div v-if="e.detalle">{{ e.detalle }}</div>
+          </div>
+        </template>
+      </div>
     </div>
   </div>
 </template>
