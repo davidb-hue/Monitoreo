@@ -300,9 +300,9 @@ export async function fijarVencimiento(s, id, d, comentario) {
   return tablero(s)
 }
 
-/** Historial por tarjeta. Solo administrador (punto 4). */
+/** Historial del seguimiento de una tarjeta. Lo ve cualquier usuario con sesión
+ *  (la trazabilidad del registro es para todos; la página «Historial» global sigue siendo solo del coordinador). */
 export async function obtenerHistorial(s, id) {
-  soloCoord(s)
   const { rows } = await pool.query(
     'SELECT fecha, operador, accion, detalle, anterior, nuevo FROM historial WHERE tarjeta_id=$1 ORDER BY id DESC', [String(id || '')])
   return rows.map((r) => ({ ...r, fecha: r.fecha.toISOString() }))

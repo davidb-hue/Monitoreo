@@ -148,7 +148,7 @@ export const fijarVencimiento = (_tk, id, d) => {
   return tablero()
 }
 
-export const obtenerHistorial = (_tk, id) => coord() ? ok(hist.filter((h) => h.id === id).slice().reverse()) : no('Solo el administrador puede ver el historial.')
+export const obtenerHistorial = (_tk, id) => ses ? ok(hist.filter((h) => h.id === id).slice().reverse()) : no('SESION_VENCIDA')
 
 export const historialGlobal = (_tk, f = {}) => {
   if (!coord()) return no('Solo el administrador puede ver el historial.')

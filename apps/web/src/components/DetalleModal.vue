@@ -36,8 +36,7 @@ const botones = computed(() => {
 })
 
 async function cargarHist() {
-  if (!esCoord.value) return // operador no ve el historial
-  hist.value = null; histErr.value = ''
+  hist.value = null; histErr.value = '' // el historial del seguimiento lo ve cualquier usuario
   try { hist.value = await api.obtenerHistorial(S.token, S.sel) }
   catch (e) { if (!sesionVencida(e)) histErr.value = msgErr(e) }
 }
@@ -92,8 +91,8 @@ onMounted(cargarHist)
         </button>
       </div>
 
-      <template v-if="esCoord">
-        <h2 class="sec">Historial</h2>
+      <template>
+        <h2 class="sec">Historial del seguimiento</h2>
         <div class="linea">
           <div v-if="histErr" class="vacio">{{ histErr }}</div>
           <div v-else-if="hist === null" class="vacio">Cargando…</div>
