@@ -1,0 +1,16 @@
+# No metemos dependencias ni secretos en la imagen
+node_modules
+**/node_modules
+apps/web/dist
+apps/web/dist-gas
+.git
+.gitignore
+.vercel
+.env
+**/.env
+*.log
+Dockerfile
+docker-compose.yml
+.dockerignore
+DOCKER.md
+README.md
