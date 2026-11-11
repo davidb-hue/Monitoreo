@@ -15,6 +15,12 @@ const abierta = computed(() => {
   return props.t.estado === 'Cerrado' ? 'Estuvo abierta ' + duracion(ms) : 'Abierta hace ' + duracion(ms)
 })
 const sla = computed(() => slaInfo(props.t, S.ahora))
+const iniciales = computed(() => {
+  const n = (props.t.responsable || '').trim()
+  if (!n) return '—'
+  const p = n.split(/\s+/)
+  return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || n[0].toUpperCase()
+})
 
 function arrastrar(ev) { ev.dataTransfer.setData('text/plain', props.t.id) }
 </script>
@@ -25,13 +31,18 @@ function arrastrar(ev) { ev.dataTransfer.setData('text/plain', props.t.id) }
     :draggable="!fija" @dragstart="arrastrar" @click="emit('abrir', t.id)"
   >
     <div class="fila1">
-      <span>{{ t.id }} · <span class="badge tipo">{{ t.tipo }}</span></span>
+      <span class="t-id">{{ t.id }}</span>
+      <span class="badge tipo">{{ t.tipo }}</span>
+      <span class="flex-sp"></span>
       <span class="badge" :class="'p-' + slug(t.prioridad)">{{ t.prioridad }}</span>
     </div>
     <div class="tit">{{ t.titulo }}</div>
     <div class="meta">
-      {{ t.sitio }} · {{ t.categoria }}
-      <template v-if="t.responsable"><br>Responsable: {{ t.responsable }}</template>
+      <span class="chip-meta">{{ t.sitio }}</span>
+      <span class="chip-meta">{{ t.categoria }}</span>
+      <span v-if="t.responsable" class="chip-resp" :title="'Responsable: ' + t.responsable">
+        <span class="avatar-sm">{{ iniciales }}</span>{{ t.responsable }}
+      </span>
     </div>
     <div class="tiempo">
       <template v-if="prog"><span class="sla neutro">⏳ {{ prog }}</span></template>

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { S, esCoord, catalogos, buscar, bloqueada, cargar, cargarOperadores, salir, accion, irA, tocar, alternarTema } from './store.js'
 import { esDemo } from './api/index.js'
-import { TZ } from './utils.js'
+import { TZ, slug } from './utils.js'
 import LoginModal from './components/LoginModal.vue'
 import Aviso from './components/Aviso.vue'
 import Tarjeta from './components/Tarjeta.vue'
@@ -113,7 +113,7 @@ onBeforeUnmount(() => { clearInterval(t1); clearInterval(t2) })
       <h2 class="sec">Seguimientos</h2>
       <div class="tablero">
         <section
-          v-for="c in columnas" :key="c.nombre" class="col" :class="{ sobre: sobre === c.nombre }"
+          v-for="c in columnas" :key="c.nombre" :class="['col', 'col-' + slug(c.nombre), { sobre: sobre === c.nombre }]"
           @dragover.prevent="sobre = c.nombre" @dragleave="sobre = ''" @drop.prevent="soltar($event, c.nombre)"
         >
           <div class="col-h"><span>{{ c.titulo }}</span><span class="n">{{ c.ts.length }}</span></div>
