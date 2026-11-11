@@ -111,13 +111,16 @@ const cargando = computed(() => !S.catalogo)
 .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
 .cat-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .cat-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
-  padding: 6px 8px; border: 1px solid var(--linea, #e3e8f0); border-radius: 8px; background: #fff; }
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .cat-row.inactivo { opacity: .6; }
-.cat-val { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cat-val { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--ink); }
 .cat-acc { display: flex; gap: 4px; flex-wrap: wrap; }
 .cat-acc .btn { padding: 4px 8px; font-size: 12px; }
+.cat-grid input:not([type="checkbox"]) { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+  background: var(--panel); color: var(--ink); font: inherit; }
+.cat-grid input:not([type="checkbox"]):focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-s); }
 .cat-row input { flex: 1; min-width: 140px; }
-.cat-nuevo { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; border-top: 1px dashed var(--linea, #e3e8f0); padding-top: 10px; }
+.cat-nuevo { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; border-top: 1px dashed var(--line); padding-top: 10px; }
 .cat-nuevo input { flex: 1; min-width: 150px; }
 .chk { display: flex; align-items: center; gap: 4px; font-size: 13px; white-space: nowrap; }
 </style>

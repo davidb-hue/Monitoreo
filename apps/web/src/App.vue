@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { S, esCoord, catalogos, buscar, bloqueada, cargar, cargarOperadores, salir, accion, irA, tocar } from './store.js'
+import { S, esCoord, catalogos, buscar, bloqueada, cargar, cargarOperadores, salir, accion, irA, tocar, alternarTema } from './store.js'
 import { esDemo } from './api/index.js'
 import { TZ } from './utils.js'
 import LoginModal from './components/LoginModal.vue'
@@ -84,6 +84,10 @@ onBeforeUnmount(() => { clearInterval(t1); clearInterval(t2) })
       <button v-if="esCoord" :class="{ activo: S.vista === 'catalogo' }" @click="irA('catalogo')">Catálogo</button>
     </nav>
     <span class="esp"></span>
+    <button class="btn-tema" :title="S.tema === 'oscuro' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+      :aria-label="S.tema === 'oscuro' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'" @click="alternarTema">
+      {{ S.tema === 'oscuro' ? '☀️' : '🌙' }}
+    </button>
     <template v-if="S.usuario">
       <span class="chip-user">{{ S.usuario.nombre }}<small>{{ S.usuario.rol }}</small></span>
       <button v-if="esCoord" class="btn btn-h" @click="S.modal = 'export'">Exportar</button>

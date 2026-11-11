@@ -7,6 +7,18 @@ const KEY = 'pizarraToken' // sessionStorage: solo esta pestaña, solo el token 
 const leerToken = () => { try { return sessionStorage.getItem(KEY) } catch { return null } }
 const guardarToken = (t) => { try { t ? sessionStorage.setItem(KEY, t) : sessionStorage.removeItem(KEY) } catch { /* sin almacenamiento */ } }
 
+// Tema (claro/oscuro): preferencia por navegador, no toca datos ni servidor.
+const TEMA_KEY = 'pizarraTema'
+const leerTema = () => { try { return localStorage.getItem(TEMA_KEY) } catch { return null } }
+const temaInicial = () => leerTema() || ((() => { try { return matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'claro' } catch { return 'claro' } })())
+export function aplicarTema(t) {
+  S.tema = t
+  try { document.documentElement.setAttribute('data-theme', t) } catch { /* sin DOM */ }
+  try { localStorage.setItem(TEMA_KEY, t) } catch { /* sin almacenamiento */ }
+  try { const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute('content', t === 'oscuro' ? '#0b1b3a' : '#0e3a8c') } catch { /* ignore */ }
+}
+export const alternarTema = () => aplicarTema(S.tema === 'oscuro' ? 'claro' : 'oscuro')
+
 export const S = reactive({
   token: leerToken(),
   usuario: null,
@@ -25,7 +37,10 @@ export const S = reactive({
   hist: null,
   usuarios: null,
   catalogo: null,
+  tema: 'claro',
 })
+
+aplicarTema(temaInicial()) // fija el tema al cargar el módulo
 
 export const esCoord = computed(() => S.usuario?.rol === 'Coordinador')
 export const catalogos = computed(() => S.datos?.catalogos)
