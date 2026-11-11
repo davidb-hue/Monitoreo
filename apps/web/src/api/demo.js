@@ -177,18 +177,34 @@ export const obtenerDashboard = (_tk) => {
   const hoy = new Date().toLocaleDateString('en-CA')
   const cerr = t.filter((x) => x.estado === 'Cerrado' && x.cerradoEn && new Date(x.cerradoEn).getTime() >= semana)
   const horas = cerr.map((x) => (new Date(x.cerradoEn).getTime() - new Date(x.creacion).getTime()) / 3600000)
+  const total = activas.length
+  const pctResolucion = total ? Math.round(((porEstado.Cerrado || 0) / total) * 100) : 0
+  const porCategoria = {}
+  activas.forEach((x) => { porCategoria[x.categoria] = (porCategoria[x.categoria] || 0) + 1 })
+  const meses = []
+  const base = new Date(); base.setDate(1)
+  for (let i = 5; i >= 0; i--) { const d = new Date(base.getFullYear(), base.getMonth() - i, 1); meses.push(d.toISOString().slice(0, 7)) }
+  const ev = {}; meses.forEach((m) => { ev[m] = { mes: m, creados: 0, cerrados: 0 } })
+  activas.forEach((x) => {
+    const mc = new Date(x.creacion).toISOString().slice(0, 7); if (ev[mc]) ev[mc].creados++
+    if (x.estado === 'Cerrado' && x.cerradoEn) { const mx = new Date(x.cerradoEn).toISOString().slice(0, 7); if (ev[mx]) ev[mx].cerrados++ }
+  })
+  const evolucionMensual = meses.map((m) => ev[m])
   return ok({
     usuario: { nombre: ses.nombre, rol: ses.rol }, ahora: new Date().toISOString(),
     totales: { pendientes: pend.length, ...porEstado },
-    porSitio, porPrioridad,
+    porSitio, porPrioridad, porCategoria, evolucionMensual,
     marcadores: {
+      total,
       vencidos: pend.filter((x) => x.vence && new Date(x.vence).getTime() < ahora).length,
       compromisoVencido: pend.filter((x) => x.fecha && x.fecha < hoy).length,
       sinMov48: pend.filter((x) => ahora - new Date(x.ultAct).getTime() > 48 * 3600000).length,
+      sinResponsable: pend.filter((x) => !String(x.responsable || '').trim()).length,
       sinLeer: pend.filter((x) => cv.tiposAviso.includes(x.tipo) && x.leido.length < nombresActivos().length).length,
       creados7: activas.filter((x) => new Date(x.creacion).getTime() >= semana).length,
       cerrados7: cerr.length,
       promedioHoras: horas.length ? Math.round((horas.reduce((a, b) => a + b, 0) / horas.length) * 10) / 10 : 0,
+      pctResolucion,
     },
   })
 }

@@ -348,12 +348,32 @@ export async function dashboard(s) {
   const cerr = todas.filter((t) => t.estado === 'Cerrado' && t.cerrado_en && t.cerrado_en >= semana)
   const horas = cerr.map((t) => (new Date(t.cerrado_en).getTime() - new Date(t.creacion).getTime()) / 3600000)
   const promedioHoras = horas.length ? Math.round((horas.reduce((a, b) => a + b, 0) / horas.length) * 10) / 10 : 0
+  // --- Dashboard gerencial: datos reales ---
+  const total = activas.length
+  const pctResolucion = total ? Math.round((porEstado.Cerrado / total) * 100) : 0
+  const sinResponsable = pend.filter((t) => !String(t.responsable || '').trim()).length
+  const porCategoria = {}
+  activas.forEach((t) => { porCategoria[t.categoria] = (porCategoria[t.categoria] || 0) + 1 })
+  const evolucionMensual = evolucion(activas)
   return {
     usuario: s, ahora: new Date().toISOString(),
     totales: { pendientes: pend.length, ...porEstado },
-    porSitio, porPrioridad,
-    marcadores: { vencidos, compromisoVencido, sinMov48, sinLeer, creados7, cerrados7: cerr.length, promedioHoras },
+    porSitio, porPrioridad, porCategoria, evolucionMensual,
+    marcadores: { total, vencidos, compromisoVencido, sinMov48, sinResponsable, sinLeer, creados7, cerrados7: cerr.length, promedioHoras, pctResolucion },
   }
+}
+
+/** Evolución mensual (últimos 6 meses): creados por mes de creación y cerrados por mes de cierre. */
+function evolucion(activas) {
+  const meses = []
+  const base = new Date(); base.setDate(1)
+  for (let i = 5; i >= 0; i--) { const d = new Date(base.getFullYear(), base.getMonth() - i, 1); meses.push(d.toISOString().slice(0, 7)) }
+  const ev = {}; meses.forEach((m) => { ev[m] = { mes: m, creados: 0, cerrados: 0 } })
+  activas.forEach((t) => {
+    const mc = new Date(t.creacion).toISOString().slice(0, 7); if (ev[mc]) ev[mc].creados++
+    if (t.estado === 'Cerrado' && t.cerrado_en) { const mx = new Date(t.cerrado_en).toISOString().slice(0, 7); if (ev[mx]) ev[mx].cerrados++ }
+  })
+  return meses.map((m) => ev[m])
 }
 
 /* ---------- usuarios (solo administrador) ---------- */
