@@ -27,7 +27,7 @@ function arrastrar(ev) { ev.dataTransfer.setData('text/plain', props.t.id) }
 
 <template>
   <article
-    class="tarjeta" :class="'t-' + slug(t.tipo)" :style="fija ? { cursor: 'pointer' } : null"
+    class="tarjeta" :class="['t-' + slug(t.tipo), { vencida: sla && sla.rojo }]" :style="fija ? { cursor: 'pointer' } : null"
     :draggable="!fija" @dragstart="arrastrar" @click="emit('abrir', t.id)"
   >
     <div class="fila1">
@@ -43,6 +43,7 @@ function arrastrar(ev) { ev.dataTransfer.setData('text/plain', props.t.id) }
       <span v-if="t.responsable" class="chip-resp" :title="'Responsable: ' + t.responsable">
         <span class="avatar-sm">{{ iniciales }}</span>{{ t.responsable }}
       </span>
+      <span v-else class="chip-sinresp" title="Esta novedad no tiene responsable asignado">⚠ Sin responsable</span>
     </div>
     <div class="tiempo">
       <template v-if="prog"><span class="sla neutro">⏳ {{ prog }}</span></template>

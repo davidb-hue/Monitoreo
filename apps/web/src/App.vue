@@ -29,13 +29,41 @@ function tic() {
   tocar()
 }
 
+const pend = (t) => t.estado === 'Abierto' || t.estado === 'En seguimiento'
+function pasaAlerta(t) {
+  const a = S.filtros.alerta
+  if (!a) return true
+  if (!pend(t)) return false
+  if (a === 'venc') return !!t.vence && new Date(t.vence).getTime() < S.ahora
+  if (a === 'sinResp') return !String(t.responsable || '').trim()
+  if (a === 'sinMov') return S.ahora - new Date(t.ultAct).getTime() > 48 * 3600000
+  return true
+}
 const filtradas = computed(() => {
   const { q, tipo, sitio, resp } = S.filtros
   const txt = q.trim().toLowerCase()
   return (S.datos?.tarjetas || []).filter((t) =>
-    (!tipo || t.tipo === tipo) && (!sitio || t.sitio === sitio) && (!resp || t.responsable === resp) &&
+    (!tipo || t.tipo === tipo) && (!sitio || t.sitio === sitio) && (!resp || t.responsable === resp) && pasaAlerta(t) &&
     (!txt || `${t.id} ${t.titulo} ${t.detalle}`.toLowerCase().includes(txt)))
 })
+const alertas = computed(() => {
+  const ts = (S.datos?.tarjetas || []).filter(pend)
+  const venc = ts.filter((t) => t.vence && new Date(t.vence).getTime() < S.ahora).length
+  const sinResp = ts.filter((t) => !String(t.responsable || '').trim()).length
+  const sinMov = ts.filter((t) => S.ahora - new Date(t.ultAct).getTime() > 48 * 3600000).length
+  return { venc, sinResp, sinMov, total: venc + sinResp + sinMov }
+})
+const alternarAlerta = (a) => { S.filtros.alerta = S.filtros.alerta === a ? '' : a }
+function ordenar(a, b) {
+  const o = S.filtros.orden
+  if (o === 'vencimiento') {
+    const va = a.vence ? new Date(a.vence).getTime() : Infinity
+    const vb = b.vence ? new Date(b.vence).getTime() : Infinity
+    return va - vb || (prio(a) - prio(b))
+  }
+  if (o === 'reciente') return b.ultAct.localeCompare(a.ultAct)
+  return (prio(a) - prio(b)) || b.ultAct.localeCompare(a.ultAct)
+}
 const tiposFiltro = computed(() => [...new Set([...catalogos.value.tipos, ...catalogos.value.tiposAviso])])
 const avisos = computed(() =>
   filtradas.value.filter((t) => catalogos.value.tiposAviso.includes(t.tipo) && t.estado !== 'Cerrado')
@@ -44,7 +72,7 @@ const columnas = computed(() => COLS.map((nombre) => {
   const esAviso = (t) => catalogos.value.tiposAviso.includes(t.tipo)
   let ts = filtradas.value.filter((t) => t.estado === nombre && !esAviso(t))
   if (nombre === 'Cerrado') ts = ts.concat(filtradas.value.filter((t) => t.estado === 'Cerrado' && esAviso(t)))
-  ts.sort((a, b) => nombre === 'Cerrado' ? b.ultAct.localeCompare(a.ultAct) : (prio(a) - prio(b)) || b.ultAct.localeCompare(a.ultAct))
+  ts.sort((a, b) => nombre === 'Cerrado' ? b.ultAct.localeCompare(a.ultAct) : ordenar(a, b))
   return { nombre, titulo: nombre === 'Cerrado' ? 'Cerrado (últimos 7 días)' : nombre, ts }
 }))
 
@@ -104,6 +132,19 @@ onBeforeUnmount(() => { clearInterval(t1); clearInterval(t2) })
         <select v-model="S.filtros.tipo"><option value="">Todos los tipos</option><option v-for="x in tiposFiltro" :key="x">{{ x }}</option></select>
         <select v-model="S.filtros.sitio"><option value="">Todos los sitios</option><option v-for="x in catalogos.sitios" :key="x">{{ x }}</option></select>
         <select v-model="S.filtros.resp"><option value="">Todos los responsables</option><option v-for="x in catalogos.responsables" :key="x">{{ x }}</option></select>
+        <select v-model="S.filtros.orden" title="Ordenar seguimientos">
+          <option value="prioridad">Orden: Prioridad</option>
+          <option value="vencimiento">Orden: Vencimiento</option>
+          <option value="reciente">Orden: Más reciente</option>
+        </select>
+      </div>
+      <div v-if="alertas.total" class="alert-bar">
+        <span class="al-ico">⚠</span>
+        <span class="al-txt">Atención</span>
+        <button v-if="alertas.venc" class="al-chip rojo" :class="{ on: S.filtros.alerta === 'venc' }" @click="alternarAlerta('venc')">{{ alertas.venc }} vencidas</button>
+        <button v-if="alertas.sinResp" class="al-chip ambar" :class="{ on: S.filtros.alerta === 'sinResp' }" @click="alternarAlerta('sinResp')">{{ alertas.sinResp }} sin responsable</button>
+        <button v-if="alertas.sinMov" class="al-chip" :class="{ on: S.filtros.alerta === 'sinMov' }" @click="alternarAlerta('sinMov')">{{ alertas.sinMov }} sin movimiento +48 h</button>
+        <button v-if="S.filtros.alerta" class="al-clear" @click="S.filtros.alerta = ''">Quitar filtro ✕</button>
       </div>
       <h2 class="sec">Avisos e instrucciones vigentes</h2>
       <div class="avisos">

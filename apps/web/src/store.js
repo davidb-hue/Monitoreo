@@ -31,7 +31,7 @@ export const S = reactive({
   modal: null, // null | 'nuevo' | 'detalle' | 'mover' | 'export' | 'vencimiento'
   sel: null,
   mover: null,
-  filtros: { q: '', tipo: '', sitio: '', resp: '' },
+  filtros: { q: '', tipo: '', sitio: '', resp: '', alerta: '', orden: 'prioridad' },
   ahora: Date.now(),
   dash: null,
   hist: null,
@@ -58,7 +58,7 @@ export function reiniciar(msg = '') {
   S.datos = null; S.usuario = null; S.modal = null; S.sel = null; S.mover = null
   S.ocupado = false; S.cargando = false; S.vista = 'tablero'
   S.dash = null; S.hist = null; S.usuarios = null; S.catalogo = null
-  Object.assign(S.filtros, { q: '', tipo: '', sitio: '', resp: '' })
+  Object.assign(S.filtros, { q: '', tipo: '', sitio: '', resp: '', alerta: '', orden: 'prioridad' })
   S.loginMsg = msg
   cargarOperadores()
 }
