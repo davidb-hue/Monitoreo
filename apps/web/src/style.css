@@ -11,7 +11,7 @@
   --sombra:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
   --sombra-h:0 6px 16px rgba(16,24,40,.12),0 2px 5px rgba(16,24,40,.08);
 }
-:root[data-theme="dark"]{
+:root[data-theme="oscuro"]{
   /* ---- Tema oscuro (sala de monitoreo / turno de noche) ---- */
   --bg:#0e141f; --panel:#1a2230; --panel-2:#222c3c; --ink:#e6ecf5; --ink-2:#c3cdda; --muted:#8b97a9; --line:#2b3545;
   --col:#141c28; --col-sobre:#1f2a3b; --card-sep:rgba(255,255,255,.08); --foco:#5b9be8;
