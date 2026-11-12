@@ -1,4 +1,7 @@
 // Modo demostración: datos en memoria (se pierden al recargar). PIN de prueba: 1234.
+import { libro, csvArchivo } from '../xlsx.js'
+import { construirReporte } from '../reportes.js'
+
 const GRUPOS = ['tipo', 'prioridad', 'categoria', 'sitio', 'turno', 'responsable']
 let catSeq = 0
 const _it = (grupo, valor, orden, aviso = false, soloCoord = false) => ({ id: ++catSeq, grupo, valor, orden, activo: true, aviso, soloCoord })
@@ -256,6 +259,20 @@ export const exportarHistorial = (_tk, formato, desde, hasta) => {
   return ok({ nombre: `Historial_${desde}_a_${hasta}.csv`, mime: 'text/csv', base64: btoa(unescape(encodeURIComponent(csv))) })
 }
 export const exportarResumen = () => no('El resumen PDF solo funciona con el servidor. En la demostración no está disponible.')
+
+export const exportarReporte = (_tk, tipo, formato, desde, hasta) => {
+  if (!coord()) return no('Solo el coordinador puede exportar.')
+  if (!desde || !hasta) return no('Elige las dos fechas.')
+  try {
+    const tarjetas = t.filter((x) => x.estado !== 'Anulado')
+    const histScoped = tipo === 'movimientos'
+      ? hist.filter((h) => h.fecha.slice(0, 10) >= desde && h.fecha.slice(0, 10) <= hasta).slice().reverse()
+      : []
+    const { nombreArchivo, hojas } = construirReporte(tipo, { tarjetas, hist: histScoped, desde, hasta, ahora: Date.now() })
+    const res = String(formato).toLowerCase() === 'csv' ? csvArchivo(nombreArchivo, hojas[0].filas) : libro(nombreArchivo, hojas)
+    return ok(res)
+  } catch (e) { return no(e.message || 'No se pudo generar el reporte.') }
+}
 
 const listaCatalogo = () => ({ grupos: GRUPOS, items: catItems.slice().sort((a, b) => a.grupo.localeCompare(b.grupo) || a.orden - b.orden) })
 export const listarCatalogo = () => coord() ? ok(listaCatalogo()) : no('Solo el administrador.')

@@ -27,7 +27,7 @@ export const S = reactive({
   cargando: false,
   operadoresLogin: [],
   loginMsg: '',
-  vista: 'tablero', // tablero | dashboard | historial | usuarios | catalogo
+  vista: 'tablero', // tablero | dashboard | reportes | historial | usuarios | catalogo
   modal: null, // null | 'nuevo' | 'detalle' | 'mover' | 'export' | 'vencimiento'
   sel: null,
   mover: null,
@@ -101,7 +101,7 @@ export async function cargar(silencioso = false) {
 
 /* ---------- navegación ---------- */
 export async function irA(vista) {
-  if (['historial', 'usuarios', 'catalogo'].includes(vista) && !esCoord.value) return
+  if (['reportes', 'historial', 'usuarios', 'catalogo'].includes(vista) && !esCoord.value) return
   S.vista = vista
   if (vista === 'dashboard') return cargarDashboard()
   if (vista === 'historial') return cargarHistorial()

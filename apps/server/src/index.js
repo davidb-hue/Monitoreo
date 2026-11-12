@@ -62,6 +62,7 @@ api.post('/catalogo', auth, ah((req) => L.crearCatalogo(req.s, req.body || {})))
 api.post('/catalogo/:id', auth, ah((req) => L.actualizarCatalogo(req.s, req.params.id, req.body || {})))
 api.get('/exportar/historial', auth, ah((req) => L.exportarHistorial(req.s, req.query.formato, req.query.desde, req.query.hasta)))
 api.get('/exportar/resumen', auth, ah((req) => L.exportarResumen(req.s, req.query.desde, req.query.hasta)))
+api.get('/exportar/reporte', auth, ah((req) => L.exportarReporte(req.s, req.query.tipo, req.query.formato, req.query.desde, req.query.hasta)))
 api.use((_req, res) => res.status(404).json({ error: 'No encontrado.' }))
 app.use('/api', api)
 

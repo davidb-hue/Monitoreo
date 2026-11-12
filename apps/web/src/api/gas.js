@@ -14,6 +14,7 @@ export const actualizarTarjeta = (token, id, accion, comentario, estadoVisto) =>
 export const obtenerHistorial = (token, id) => call('obtenerHistorial', token, id)
 export const exportarHistorial = (token, formato, desde, hasta) => call('exportarHistorial', token, formato, desde, hasta)
 export const exportarResumen = (token, desde, hasta) => call('exportarResumen', token, desde, hasta)
+export const exportarReporte = (token, tipo, formato, desde, hasta) => call('exportarReporte', token, tipo, formato, desde, hasta)
 export const obtenerDashboard = (token) => call('obtenerDashboard', token)
 export const fijarVencimiento = (token, id, d) => call('fijarVencimiento', token, id, d)
 export const historialGlobal = (token, f) => call('historialGlobal', token, f)

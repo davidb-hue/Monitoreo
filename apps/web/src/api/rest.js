@@ -24,6 +24,7 @@ export const actualizarTarjeta = (token, id, accion, comentario, estadoVisto) =>
 export const obtenerHistorial = (token, id) => req('GET', `/tarjetas/${encodeURIComponent(id)}/historial`, token)
 export const exportarHistorial = (token, formato, desde, hasta) => req('GET', '/exportar/historial?' + qs({ formato, desde, hasta }), token)
 export const exportarResumen = (token, desde, hasta) => req('GET', '/exportar/resumen?' + qs({ desde, hasta }), token)
+export const exportarReporte = (token, tipo, formato, desde, hasta) => req('GET', '/exportar/reporte?' + qs({ tipo, formato, desde, hasta }), token)
 
 export const obtenerDashboard = (token) => req('GET', '/dashboard', token)
 export const fijarVencimiento = (token, id, d) => req('POST', `/tarjetas/${encodeURIComponent(id)}/vencimiento`, token, d)

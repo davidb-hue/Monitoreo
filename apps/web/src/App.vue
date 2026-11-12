@@ -12,6 +12,7 @@ import MoverModal from './components/MoverModal.vue'
 import ExportModal from './components/ExportModal.vue'
 import VencimientoModal from './components/VencimientoModal.vue'
 import DashboardView from './components/DashboardView.vue'
+import ReportesView from './components/ReportesView.vue'
 import HistorialView from './components/HistorialView.vue'
 import UsuariosView from './components/UsuariosView.vue'
 import CatalogoView from './components/CatalogoView.vue'
@@ -107,6 +108,7 @@ onBeforeUnmount(() => { clearInterval(t1); clearInterval(t2) })
     <nav v-if="S.usuario" class="nav">
       <button :class="{ activo: S.vista === 'tablero' }" @click="irA('tablero')">Tablero</button>
       <button :class="{ activo: S.vista === 'dashboard' }" @click="irA('dashboard')">Dashboard</button>
+      <button v-if="esCoord" :class="{ activo: S.vista === 'reportes' }" @click="irA('reportes')">Reportes</button>
       <button v-if="esCoord" :class="{ activo: S.vista === 'historial' }" @click="irA('historial')">Historial</button>
       <button v-if="esCoord" :class="{ activo: S.vista === 'usuarios' }" @click="irA('usuarios')">Usuarios</button>
       <button v-if="esCoord" :class="{ activo: S.vista === 'catalogo' }" @click="irA('catalogo')">Catálogo</button>
@@ -165,6 +167,7 @@ onBeforeUnmount(() => { clearInterval(t1); clearInterval(t2) })
     </main>
 
     <main v-if="S.vista === 'dashboard'" class="main-dash"><DashboardView /></main>
+    <main v-if="S.vista === 'reportes' && esCoord"><ReportesView /></main>
     <main v-if="S.vista === 'historial' && esCoord"><HistorialView /></main>
     <main v-if="S.vista === 'usuarios' && esCoord"><UsuariosView /></main>
     <main v-if="S.vista === 'catalogo' && esCoord"><CatalogoView /></main>

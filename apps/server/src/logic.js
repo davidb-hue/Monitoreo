@@ -3,6 +3,8 @@
 import crypto from 'node:crypto'
 import PDFDocument from 'pdfkit'
 import { pool, tx } from './db.js'
+import { libro, csvArchivo } from './xlsx.js'
+import { construirReporte } from './reportes.js'
 
 export const CFG = {
   TZ: 'America/El_Salvador',
@@ -586,4 +588,25 @@ export async function exportarResumen(s, desde, hasta) {
   })
   await log({ operador: s.nombre, accion: 'EXPORTAR', detalle: `Resumen PDF · ${desde} a ${hasta}` })
   return archivo(nombre + '.pdf', 'application/pdf', buf)
+}
+
+/* ---------- reportes gerenciales (Excel / CSV) ---------- */
+export async function exportarReporte(s, tipo, formato, desde, hasta) {
+  soloCoord(s)
+  tipo = String(tipo || '')
+  formato = String(formato || 'xlsx').toLowerCase()
+  if (!['xlsx', 'csv'].includes(formato)) throw new ErrorApp('Formato no válido.')
+  const r = rango(desde, hasta) // valida el rango de fechas
+  const { rows } = await pool.query(`SELECT ${COLS} FROM tarjetas`)
+  const tarjetas = rows.map(aTarjeta)
+  let hist = []
+  if (tipo === 'movimientos') {
+    const { rows: h } = await pool.query(
+      'SELECT fecha, operador, accion, tarjeta_id, detalle, anterior, nuevo FROM historial WHERE fecha >= $1 AND fecha < $2 ORDER BY id DESC', [r.d0, r.d1])
+    hist = h.map((f) => ({ fecha: f.fecha.toISOString(), operador: f.operador, accion: f.accion, tarjetaId: f.tarjeta_id, detalle: f.detalle, anterior: f.anterior, nuevo: f.nuevo }))
+  }
+  const { nombreArchivo, hojas } = construirReporte(tipo, { tarjetas, hist, desde, hasta, ahora: Date.now() })
+  const res = formato === 'csv' ? csvArchivo(nombreArchivo, hojas[0].filas) : libro(nombreArchivo, hojas)
+  await log({ operador: s.nombre, accion: 'EXPORTAR', detalle: `Reporte ${tipo} ${formato.toUpperCase()} · ${desde} a ${hasta}` })
+  return res
 }
